@@ -5,7 +5,7 @@ import gymnasium as gym
 from shared_core_config import SHARED_CORE_ENV_ID, SHARED_CORE_CONFIG
 from agents.random_agent import RandomAgent
 # from agents.dqn_custom import DQNAgent
-# from agents.sb3_agent import SB3Agent
+from agents.dqn_sb3 import SB3Agent
 import highway_env
 
 
@@ -18,7 +18,7 @@ def make_env():
     return _init
 
 
-def run_episode(agent_type="random", render=True):
+def run_episode(agent_type="random", render=True, model_path=None):
     render_mode = "human" if render else None
     env = gym.make(SHARED_CORE_ENV_ID, render_mode=render_mode)
     env.unwrapped.configure(SHARED_CORE_CONFIG)
@@ -27,10 +27,8 @@ def run_episode(agent_type="random", render=True):
 
     if agent_type == "random":
         agent = RandomAgent(env.action_space)
-    elif agent_type == "dqn_custom":
-        raise NotImplementedError("DQN personnalisé non implémenté.")
     elif agent_type == "sb3":
-        raise NotImplementedError("Modèle SB3 non lié.")
+        agent = SB3Agent(model_path=model_path, action_space=env.action_space)
     else:
         raise ValueError(f"Agent inconnu : {agent_type}")
 
@@ -53,16 +51,14 @@ def run_episode(agent_type="random", render=True):
     return total_reward, step
 
 
-def run_parallel_episodes(agent_type="random", num_episodes=50, num_envs=4):
+def run_parallel_episodes(agent_type="random", num_episodes=50, num_envs=4, model_path=None):
     envs = gym.vector.AsyncVectorEnv([make_env() for _ in range(num_envs)])
     obs, info = envs.reset()
 
     if agent_type == "random":
         agent = RandomAgent(envs.action_space)
-    elif agent_type == "dqn_custom":
-        raise NotImplementedError("DQN personnalisé non implémenté.")
     elif agent_type == "sb3":
-        raise NotImplementedError("Modèle SB3 non lié.")
+        agent = SB3Agent(model_path=model_path, action_space=envs.action_space)
     else:
         raise ValueError(f"Agent inconnu : {agent_type}")
 
@@ -105,7 +101,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Évaluation des agents sur Highway-env")
     parser.add_argument("--agent", type=str,
-                        default="random", choices=["random"])
+                        default="random", choices=["random", "sb3"])
+    parser.add_argument("--name", type=str, default=None)
     parser.add_argument("--episodes", type=int, default=1)
     parser.add_argument("--no-render", action="store_true")
     parser.add_argument("--num-envs", type=int, default=4,
@@ -114,14 +111,19 @@ if __name__ == "__main__":
     args = parser.parse_args()
     render = not args.no_render
 
-    print(
-        f"Lancement de {args.episodes} épisode(s) avec l'agent '{args.agent}'...")
+    print(f"Lancement de {args.episodes} épisode(s) avec l'agent '{args.agent}'...")
 
+    model_path = f"results/checkpoints/{args.agent}/{args.name}.zip"
+    if not os.path.exists(model_path) and args.agent != "random":
+        print(f"Modèle non trouvé : {model_path}")
+        print("Assurez-vous que le modèle existe ou exécutez d'abord l'entraînement.")
+        exit(1)
+    
     if render:
         rewards = []
         steps = []
         for i in range(args.episodes):
-            reward, step = run_episode(agent_type=args.agent, render=render)
+            reward, step = run_episode(agent_type=args.agent, render=render, model_path=model_path)
             rewards.append(reward)
             steps.append(step)
             if args.episodes <= 10 or (i + 1) % 5 == 0:
@@ -132,7 +134,8 @@ if __name__ == "__main__":
         rewards, steps = run_parallel_episodes(
             agent_type=args.agent,
             num_episodes=args.episodes,
-            num_envs=args.num_envs
+            num_envs=args.num_envs,
+            model_path=model_path
         )
 
     if args.episodes > 1:

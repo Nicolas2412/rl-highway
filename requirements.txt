@@ -1,2 +1,3 @@
 gymnasium
 highway_env
+stable_baselines3
