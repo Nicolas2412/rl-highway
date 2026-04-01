@@ -1,7 +1,8 @@
 .venv
 *.pyc
 __pycache__/
-*.zip
 *.err
 *.out
 results/logs
+results/checkpoints
+results/models

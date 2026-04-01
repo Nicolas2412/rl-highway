@@ -60,7 +60,18 @@ def make_env():
     """Crée une instance de l'environnement avec la config partagée."""
     def _init():
         env = gym.make(SHARED_CORE_ENV_ID)
-        env.unwrapped.configure(SHARED_CORE_CONFIG)
+        
+        train_config = SHARED_CORE_CONFIG.copy()
+        
+        train_config["observation"].update({"vehicles_count": 5})
+        
+        # On ajuste la config pour un meilleur entraînement
+        train_config.update({
+            "vehicles_count": 25,      
+            "collision_reward": -10.0,
+        })
+        
+        env.unwrapped.configure(train_config)
         env = Monitor(env)
         return env
     return _init
@@ -89,6 +100,8 @@ def train(save_path, steps=5000, num_envs=4, save_freq=10000):
         env,
         verbose=1,
         tensorboard_log="results/logs/sb3/",
+        exploration_fraction=0.3,
+        exploration_final_eps=0.05,
     )
 
     print(f"Début de l'entraînement : {save_path.split('/')[-1]}")
