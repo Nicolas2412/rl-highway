@@ -11,4 +11,5 @@ class RandomAgent:
         Renvoie une action aléatoire tirée de l'espace d'actions.
         L'observation est ignorée.
         """
-        return self.action_space.sample()
+        action = self.action_space.sample()
+        return action

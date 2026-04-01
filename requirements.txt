@@ -1,3 +1,7 @@
 gymnasium
 highway_env
 stable_baselines3
+shimmy>=2.0
+pygame
+tensorboard
+tqdm
