@@ -4,9 +4,9 @@ import numpy as np
 import gymnasium as gym
 from shared_core_config import SHARED_CORE_ENV_ID, SHARED_CORE_CONFIG
 from agents.random_agent import RandomAgent
-# from agents.dqn_custom import DQNAgent
-# from agents.sb3_agent import SB3Agent
+from agents.dqn_custom import DQN_Custom
 import highway_env
+
 
 
 def make_env():
@@ -28,7 +28,7 @@ def run_episode(agent_type="random", render=True):
     if agent_type == "random":
         agent = RandomAgent(env.action_space)
     elif agent_type == "dqn_custom":
-        raise NotImplementedError("DQN personnalisé non implémenté.")
+        agent = DQN_Custom(env.action_space, env.observation_space)
     elif agent_type == "sb3":
         raise NotImplementedError("Modèle SB3 non lié.")
     else:
@@ -60,7 +60,7 @@ def run_parallel_episodes(agent_type="random", num_episodes=50, num_envs=4):
     if agent_type == "random":
         agent = RandomAgent(envs.action_space)
     elif agent_type == "dqn_custom":
-        raise NotImplementedError("DQN personnalisé non implémenté.")
+        agent = DQN_Custom(envs.action_space, envs.observation_space)
     elif agent_type == "sb3":
         raise NotImplementedError("Modèle SB3 non lié.")
     else:
@@ -105,7 +105,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Évaluation des agents sur Highway-env")
     parser.add_argument("--agent", type=str,
-                        default="random", choices=["random"])
+                        default="random", choices=["random", "dqn_custom"])
     parser.add_argument("--episodes", type=int, default=1)
     parser.add_argument("--no-render", action="store_true")
     parser.add_argument("--num-envs", type=int, default=4,
