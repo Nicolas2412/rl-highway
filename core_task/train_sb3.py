@@ -5,7 +5,8 @@ import time
 current_dir = os.path.dirname(os.path.abspath(__file__))
 root_dir = os.path.dirname(current_dir)
 sys.path.append(root_dir)
-from shared_core_config import SHARED_CORE_ENV_ID, SHARED_CORE_CONFIG
+# from shared_core_config import SHARED_CORE_ENV_ID, SHARED_CORE_CONFIG
+from training_config_sb3 import TRAIN_ENV_ID, TRAIN_CONFIG
 
 import argparse
 import os
@@ -56,35 +57,54 @@ class HighwayMetricsCallback(BaseCallback):
         
         return True
 
-def make_env():
-    """Crée une instance de l'environnement avec la config partagée."""
+
+class DecayLaneChangeWrapper(gym.Wrapper):
+    """
+    Wrapper qui ajoute un bonus aux changements de file, 
+    lequel diminue linéairement au fil des étapes.
+    """
+    def __init__(self, env, total_decay_steps=200000, initial_bonus=0.5, final_bonus=0.05):
+        super().__init__(env)
+        self.total_decay_steps = total_decay_steps
+        self.initial_bonus = initial_bonus
+        self.final_bonus = final_bonus
+        self.current_step = 0
+
+    def step(self, action):
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        
+        if action in [0, 2]:
+            fraction = min(1.0, self.current_step / self.total_decay_steps)
+            
+            # Interpolation linéaire : on part de initial, on arrive à final
+            bonus = self.initial_bonus + (self.final_bonus - self.initial_bonus) * fraction
+            reward += bonus
+            
+        self.current_step += 1
+        return obs, reward, terminated, truncated, info
+
+    def reset(self, **kwargs):
+        # On ne réinitialise PAS current_step ici si on veut que le bonus 
+        # diminue sur toute la durée de l'entraînement, pas par épisode.
+        return self.env.reset(**kwargs)
+    
+    
+def make_env(total_decay_steps:int):
     def _init():
-        env = gym.make(SHARED_CORE_ENV_ID)
+        env = gym.make(TRAIN_ENV_ID)
+        env.unwrapped.configure(TRAIN_CONFIG)
+        env = DecayLaneChangeWrapper(env, total_decay_steps=total_decay_steps, initial_bonus=0.05, final_bonus=0.05)
+        env.reset() 
         
-        train_config = SHARED_CORE_CONFIG.copy()
-        
-        train_config["observation"].update({"vehicles_count": 5})
-        
-        # On ajuste la config pour un meilleur entraînement
-        train_config.update({
-            "vehicles_count": 25,      
-            "collision_reward": -10.0,
-        })
-        
-        env.unwrapped.configure(train_config)
-        env = Monitor(env)
-        return env
+        return Monitor(env)
     return _init
 
 
-def train(save_path, steps=5000, num_envs=4, save_freq=10000):
+def train(save_path, steps=5000, num_envs=4, save_freq=10000, load_path=None):
     print(f"Initialisation de {num_envs} env pour {steps} steps...")
 
     # Utilisation d'environnements vectorisés pour accélérer l'entraînement
-    env = SubprocVecEnv([make_env() for _ in range(num_envs)])
-
-    # Configuration du Callback de sauvegarde
-    # save_freq est par rapport au nombre de steps cumulées sur tous les envs.
+    env = SubprocVecEnv([make_env(total_decay_steps = 250000/num_envs) for _ in range(num_envs)])
     checkpoint_callback = CheckpointCallback(
         save_freq=max(save_freq // num_envs, 1),
         save_path=f"results/checkpoints/sb3/{save_path.split('/')[-1]}",
@@ -95,18 +115,33 @@ def train(save_path, steps=5000, num_envs=4, save_freq=10000):
     
     callback = CallbackList([checkpoint_callback, metrics_callback])
 
-    model = DQN(
-        "MlpPolicy",
-        env,
-        verbose=1,
-        tensorboard_log="results/logs/sb3/",
-        exploration_fraction=0.3,
-        exploration_final_eps=0.05,
-    )
+    if load_path:
+        print(f"Chargement du modèle : {load_path}")
+        model = DQN.load(
+            load_path, 
+            env=env, 
+            device="auto",
+            custom_objects={
+                "exploration_initial_eps": 0.15,  # On met une valeur de départ énorme (virtuelle)
+                "exploration_final_eps": 0.05,
+                "exploration_fraction":0.5      # On étale le calcul sur 100% de la durée
+            }
+        )
+    else:
+        print("Création d'un nouveau modèle...")
+        model = DQN(
+            "MlpPolicy",
+            env,
+            verbose=1,
+            tensorboard_log="results/logs/sb3/",
+            exploration_fraction=0.5,
+            exploration_final_eps=0.05,
+        )
 
     print(f"Début de l'entraînement : {save_path.split('/')[-1]}")
     model.learn(total_timesteps=steps, callback=callback,
-        tb_log_name=save_path.split('/')[-1])
+        tb_log_name=save_path.split('/')[-1],
+        reset_num_timesteps=(load_path is None))
 
     model.save(save_path)
     print(f"Modèle sauvegardé sous : {save_path}.zip")
@@ -125,6 +160,8 @@ if __name__ == "__main__":
                         help="Nombre d'environnements parallèles")
     parser.add_argument("--name", type=str,
                         default=None, help="Nom du modèle")
+    parser.add_argument("--load", type=str,
+                        default=None, help="Chemin du modèle à charger")
 
     args = parser.parse_args()
 
@@ -149,4 +186,8 @@ if __name__ == "__main__":
     # Création du dossier de sauvegarde si nécessaire
     os.makedirs(save_dir, exist_ok=True)
     
-    train(save_path, steps=args.steps, num_envs=args.envs, save_freq=args.save_freq)
+    train(save_path, 
+        steps=args.steps, 
+        num_envs=args.envs, 
+        save_freq=args.save_freq,
+        load_path=args.load)
