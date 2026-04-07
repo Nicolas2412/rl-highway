@@ -1,33 +1,57 @@
+from agents.base_agent import BaseAgent
 from stable_baselines3 import DQN
+from callbacks import HighwayMetricsCallback
 
-class SB3Agent:
-    def __init__(self, model_path=None, action_space=None, deterministic=False):
+class SB3DQNAgent(BaseAgent):
+    def __init__(self, env=None, model_path=None, tensorboard_log="results/logs/dqn_sb3/", **kwargs):
         """
-        Initialise l'agent SB3. 
-        Si model_path est fourni, le modèle est chargé depuis le disque.
+        Initialise l'agent SB3.
+        Soit on crée un nouveau modèle depuis l'environnement, 
+        soit on charge un modèle pré-entraîné.
         """
-        self.action_space = action_space
-        self.deterministic = deterministic
-        self.model = None
-
-        if model_path:
-            self.load(model_path)
-
-    def load(self, model_path):
-        """Charge un modèle DQN entraîné avec Stable-Baselines3."""
-        self.model = DQN.load(model_path)
-
-    def act(self, observation, deterministic=None):
-        """
-        Prédit l'action à partir de l'observation.
-        SB3 renvoie (action, _states), on ne garde que l'action.
-        """
-        deterministic = self.deterministic if deterministic is None else deterministic
-        if self.model is not None:
-            # deterministic=True est crucial pour l'évaluation [cite: 42]
-            action, _states = self.model.predict(
-                observation, deterministic=deterministic)
-            return action
+        if model_path is not None:
+            self.model = DQN.load(model_path, env=env)
+        elif env is not None:
+            # Transfert des hyperparamètres SB3 via kwargs (learning_rate, buffer_size, etc.)
+            self.model = DQN("MlpPolicy", env, tensorboard_log=tensorboard_log, **kwargs)
         else:
-            # Fallback si aucun modèle n'est chargé
-            return self.action_space.sample()
+            raise ValueError("Il faut fournir soit un 'env' soit un 'model_path'.")
+
+    def act(self, obs, epsilon=None):
+        """
+        Sélectionne une action.
+        SB3 gère l'exploration en interne pendant l'entraînement.
+        En phase d'utilisation (inférence), on utilise deterministic=True.
+        """
+        # La méthode predict de SB3 renvoie un tuple (action, state)
+        action, _states = self.model.predict(obs, deterministic=True)
+        return int(action)
+
+    def update(self, obs, action, reward, terminated, next_obs):
+        """
+        No-op pour SB3. 
+        SB3 gère le Replay Buffer et la descente de gradient en interne 
+        pendant l'appel à model.learn().
+        """
+        pass
+
+    def train(self, env, num_episodes=500, seed=None, log_dir=None, run_name=None):
+        """
+        Lance l'entraînement.
+        Attention: SB3 compte en 'timesteps' et non en épisodes.
+        """
+        # 30 steps est durée max d'un episode dans la config de test
+        total_timesteps = num_episodes * 30
+        
+        self.model.learn(total_timesteps=total_timesteps, 
+                        tb_log_name=run_name or "SB3_Run",
+                        callback= HighwayMetricsCallback(),
+                        reset_num_timesteps=False)
+
+    def save(self, path):
+        """Sauvegarde l'archive .zip du modèle."""
+        self.model.save(path)
+
+    def load(self, path):
+        """Charge l'archive .zip du modèle."""
+        self.model = DQN.load(path)

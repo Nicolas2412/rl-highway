@@ -11,7 +11,8 @@ import gymnasium as gym
 from agents.base_agent import BaseAgent
 import os
 import matplotlib.pyplot as plt
-
+from torch.utils.tensorboard import SummaryWriter
+import time
 
 class ReplayBuffer:
     def __init__(self, capacity):
@@ -51,7 +52,7 @@ class Net(nn.Module):
         return self.net(x)
 
 
-class DQN_Custom(BaseAgent):
+class DQNAgent(BaseAgent):
     def __init__(
         self,
         action_space,
@@ -64,6 +65,7 @@ class DQN_Custom(BaseAgent):
         decrease_epsilon_factor=100,
         epsilon_min=0.05,
         learning_rate=5e-4,
+        hidden_size=128,
     ):
         self.action_space = action_space
         self.observation_space = observation_space
@@ -80,7 +82,8 @@ class DQN_Custom(BaseAgent):
         self.epsilon_min = epsilon_min
 
         self.learning_rate = learning_rate
-
+        self.hidden_size = hidden_size
+        
         self.reset()
         
     @property
@@ -162,7 +165,7 @@ class DQN_Custom(BaseAgent):
         )
 
     def reset(self):
-        hidden_size = 128
+        hidden_size = self.hidden_size
 
         obs_size = np.prod(self.observation_space.shape)
         n_actions = self.action_space.n
@@ -180,44 +183,68 @@ class DQN_Custom(BaseAgent):
         self.n_steps = 0
         self.n_eps = 0
         
-    def train(self, env, num_episodes=500, seed=None, plot=True, plot_path="results/training_dqn_custom.png"):
+    def train(self, env, num_episodes=500, seed=None, log_dir="results/logs/dqn_custom", run_name="DQN_Custom"):
         if seed is not None:
             np.random.seed(seed)
             torch.manual_seed(seed)
 
-        episode_rewards = []
-        episode_lengths = []
-        episode_collisions = []
+        os.makedirs(log_dir, exist_ok=True)
+        writer = SummaryWriter(log_dir=os.path.join(log_dir, run_name))
 
+        episode_count = 0
+        collision_count = 0
+        
+        start_time = time.time()
+        total_steps = 0
+    
         obs, _ = env.reset(seed=seed)
         for ep in range(num_episodes):
             obs, _ = env.reset()
             done, truncated = False, False
             total_reward, steps, crashed = 0, 0, False
-
+            step_start = time.time()
             while not (done or truncated):
                 action = self.act(obs)
                 next_obs, reward, done, truncated, info = env.step(action)
-                self.update(obs, action, reward, done, next_obs)
+                
+                #Log Tensorboard par step
+                if "speed" in info:
+                    writer.add_scalar("env/speed", info["speed"], total_steps)
+                if "rewards" in info:
+                    for key, val in info["rewards"].items():
+                        writer.add_scalar(f"env/reward_{key}", val, total_steps)
+                
+                loss = self.update(obs, action, reward, done or truncated, next_obs)
+                if loss is not None and loss != np.inf:
+                    writer.add_scalar("train/loss", loss, total_steps)
+                    
+                if total_steps % 10 == 0:
+                    writer.add_scalar("train/learning_rate", self.optimizer.param_groups[0]['lr'], total_steps)
+                    
+                    elapsed_time = time.time() - start_time
+                    fps = total_steps / elapsed_time if elapsed_time > 0 else 0
+                    writer.add_scalar("time/fps", fps, total_steps)
+                    
+                    writer.add_scalar("rollout/exploration_rate", self.epsilon, total_steps)
+                    
                 obs = next_obs
                 total_reward += reward
                 steps += 1
+                total_steps += 1
                 if info.get("crashed", False):
                     crashed = True
-
-            episode_rewards.append(total_reward)
-            episode_lengths.append(steps)
-            episode_collisions.append(1 if crashed else 0)
-
-            if (ep + 1) % 50 == 0:
-                print(f"Episode {ep+1}/{num_episodes} | "
-                    f"Reward: {np.mean(episode_rewards[-50:]):.2f} | "
-                    f"Length: {np.mean(episode_lengths[-50:]):.1f} | "
-                    f"Collision rate: {np.mean(episode_collisions[-50:]):.2f} | "
-                    f"ε: {self.epsilon:.3f}")
-
-        if plot:
-            self._plot_training(episode_rewards, episode_lengths, episode_collisions, plot_path)
+            
+            #Log Tensoboard par episode
+            episode_count += 1
+            if crashed:
+                collision_count += 1
+                
+            writer.add_scalar("rollout/ep_rew_mean", total_reward, total_steps)
+            writer.add_scalar("rollout/ep_len_mean", steps, total_steps)
+            writer.add_scalar("env/collision_rate", collision_count / episode_count, total_steps)
+            writer.add_scalar("env/epsilon", self.epsilon, total_steps)
+        
+        writer.close()
 
     def _plot_training(self, rewards, lengths, collisions, path):
         window = 50

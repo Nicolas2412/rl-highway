@@ -12,8 +12,11 @@ class BaseAgent(ABC):
         """Update the agent (no-op for non-learning agents)."""
         pass
 
-    def train(self, env, num_episodes=500, seed=None):
-        """Full training loop. No-op for non-learning agents."""
+    def train(self, env, num_episodes=500, seed=None, log_dir:str=None, run_name:str=None):
+        """Full training loop. No-op for non-learning agents.
+        log_dir: Dossier principal pour TensorBoard
+        run_name: Nom  de l'expérience 
+        """
         pass
 
     def save(self, path):
