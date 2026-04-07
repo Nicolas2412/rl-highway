@@ -1,9 +1,10 @@
-class RandomAgent:
+from agents.base_agent import BaseAgent
+
+class RandomAgent(BaseAgent):
     """
     Un agent basique qui sélectionne des actions de manière purement aléatoire.
     """
-
-    def __init__(self, action_space):
+    def __init__(self, action_space, observation_space, **kwargs):
         self.action_space = action_space
 
     def act(self, observation):
