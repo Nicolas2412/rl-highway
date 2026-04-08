@@ -13,6 +13,7 @@ import os
 import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
 import time
+from shared_core_config import DQN_CUSTOM_PARAMS
 
 class ReplayBuffer:
     def __init__(self, capacity):
@@ -57,32 +58,21 @@ class DQNAgent(BaseAgent):
         self,
         action_space,
         observation_space,
-        gamma=0.99,
-        batch_size=16,
-        buffer_capacity=15_000,
-        update_target_every=100,
-        epsilon_start=1,
-        decrease_epsilon_factor=100,
-        epsilon_min=0.05,
-        learning_rate=5e-4,
-        hidden_size=128,
+        params=None,
     ):
+        p = params if params is not None else DQN_CUSTOM_PARAMS
+        
         self.action_space = action_space
         self.observation_space = observation_space
-        self.gamma = gamma
-
-        self.batch_size = batch_size
-        self.buffer_capacity = buffer_capacity
-        self.update_target_every = update_target_every
-
-        self.epsilon_start = epsilon_start
-        self.decrease_epsilon_factor = (
-            decrease_epsilon_factor  # larger -> more exploration
-        )
-        self.epsilon_min = epsilon_min
-
-        self.learning_rate = learning_rate
-        self.hidden_size = hidden_size
+        self.gamma = p.get("gamma", 0.99)
+        self.batch_size = p.get("batch_size", 16)
+        self.buffer_capacity = p.get("buffer_capacity", 15_000)
+        self.update_target_every = p.get("update_target_every", 100)
+        self.epsilon_start = p.get("epsilon_start", 1)
+        self.decrease_epsilon_factor = p.get("decrease_epsilon_factor", 100)
+        self.epsilon_min = p.get("epsilon_min", 0.05)
+        self.learning_rate = p.get("learning_rate", 5e-4)
+        self.hidden_size = p.get("hidden_size", 128)
         
         self.reset()
         

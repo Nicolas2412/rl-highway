@@ -1,5 +1,6 @@
 # evaluate.py
 import numpy as np
+from shared_core_config import SHARED_SEED 
 
 def evaluate_agent(agent, env, num_episodes=50, seed=None):
     """Works for ANY agent that implements BaseAgent."""
@@ -43,6 +44,7 @@ def evaluate_over_seeds(agent_cls, agent_kwargs, make_env_fn,
 
     for seed in seeds:
         env = make_env_fn()
+
         agent = agent_cls(
             action_space=env.action_space,
             observation_space=env.observation_space,
@@ -50,12 +52,12 @@ def evaluate_over_seeds(agent_cls, agent_kwargs, make_env_fn,
         )
 
         if agent.needs_training:
-            print("------ Starting training ------")
+            print(f"------ Starting training (Seed: {seed}) ------")
             agent.train(env, num_episodes=num_train_episodes, seed=seed)
             if weights_path:
                 agent.save(weights_path.format(seed=seed))
             
-        print("------ Starting evaluation ------")
+        print(f"------ Starting evaluation (Seed: {seed}) ------")
         results = evaluate_agent(agent, env, num_episodes=num_eval_episodes, seed=seed)
         all_rewards.extend(results["raw_rewards"])
         all_success_rates.append(results["success_rate"])
