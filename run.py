@@ -33,7 +33,7 @@ def run_episode(agent_type="random", render=True, model_path=None):
         agent = RandomAgent(env.action_space)
     elif agent_type == "dqn_custom":
         agent = DQNAgent(cfg=HighwayDQNConfig(), obs_shape=env.observation_space.shape, n_actions=env.action_space.n)
-        agent.load_checkpoint(r"checkpoints\dqn_highway_step30000.pt")
+        agent.load_checkpoint(r"checkpoints\dqn_highway_step10000.pt")
     elif agent_type == "sb3":
         agent = SB3Agent(model_path=model_path, action_space=env.action_space, determistic=True)
     else:
@@ -67,7 +67,7 @@ def run_parallel_episodes(agent_type="random", num_episodes=50, num_envs=4):
     elif agent_type == "dqn_custom":
         obs_shape = envs.observation_space.shape[1:]
         agent = DQNAgent(cfg=HighwayDQNConfig(), obs_shape=obs_shape, n_actions=envs.action_space.n)
-        agent.load_checkpoint(r"checkpoints\dqn_highway_step30000.pt")
+        agent.load_checkpoint(r"checkpoints\dqn_highway_step10000.pt")
     elif agent_type == "sb3":
         raise NotImplementedError("Modèle SB3 non lié.")
     else:

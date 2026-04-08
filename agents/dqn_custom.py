@@ -38,7 +38,7 @@ class HighwayDQNConfig:
     epsilon_end: float = 0.01
     epsilon_decay_steps: int = 100_000
     # Checkpoints
-    checkpoint_dir: str = "./checkpoints"
+    checkpoint_dir: str = "/checkpoints"
     checkpoint_frequency: int = 10_000
 
 
@@ -125,6 +125,7 @@ class DQNAgent:
         obs_t = torch.tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0)
         with torch.no_grad():
             return self.q_net(obs_t).argmax(dim=1).item()
+
     def update(self):
         if len(self.buffer) < self.cfg.batch_size:
             return None

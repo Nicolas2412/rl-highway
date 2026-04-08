@@ -5,67 +5,89 @@ import torch
 import gymnasium as gym
 import highway_env  
 from tqdm import tqdm
+from typing import Optional
 
-from ..shared_core_config import SHARED_CORE_CONFIG
-from ..agents.dqn_custom import HighwayDQNConfig, DQNAgent
+from shared_core_config import SHARED_CORE_CONFIG
+from agents.dqn_custom import HighwayDQNConfig, DQNAgent
 
-# Log every N steps — tune down for more granularity, up for quieter output
 LOG_FREQ = 5_000
 
 
-# ─── Training loop ────────────────────────────────────────────────────────────
-
-def train_highway_dqn(cfg: HighwayDQNConfig):
-    # Seed for reproducibility
+def train_highway_dqn(
+    cfg: HighwayDQNConfig,
+    resume_from: Optional[str] = None,
+):
     random.seed(cfg.seed)
     np.random.seed(cfg.seed)
     torch.manual_seed(cfg.seed)
 
-    # Build environment — use unwrapped.configure() as required by highway-env
     env = gym.make(cfg.env_id)
     env.unwrapped.configure(SHARED_CORE_CONFIG)
     obs, _ = env.reset(seed=cfg.seed)
 
-    obs_shape = env.observation_space.shape  # (5, 5): 5 vehicles × 5 kinematic features
-    n_actions = env.action_space.n           # 5 discrete meta-actions
+    obs_shape = env.observation_space.shape
+    n_actions = env.action_space.n
 
     agent = DQNAgent(cfg, obs_shape, n_actions)
 
-    # Per-episode accumulators
-    episode_reward = 0.0
-    ep_len = 0
-
-    # Metric histories (saved at the end for evaluation and plotting)
+    # ─── Reprise depuis checkpoint ────────────────────────────────────────────
+    start_step = 0
     episode_rewards: list[float] = []
     ep_lengths: list[int] = []
     losses: list[float] = []
 
-    # Timing for steps/sec estimate
+    if resume_from is not None:
+        agent.load_checkpoint(resume_from)
+        start_step = agent.global_step
+
+        # Recharge les métriques accumulées si elles existent
+        for fname, target in [
+            ("episode_rewards.npy", episode_rewards),
+            ("ep_lengths.npy",      ep_lengths),
+            ("losses.npy",          losses),
+        ]:
+            path = f"{cfg.checkpoint_dir}/{fname}"
+            try:
+                target.extend(np.load(path).tolist())
+                print(f"  Métriques chargées : {path} ({len(target)} entrées)")
+            except FileNotFoundError:
+                print(f"  Métriques absentes ({fname}), on repart de zéro pour celles-ci")
+
+        print(f"\n  Reprise depuis le step {start_step:,} / {cfg.total_timesteps:,}\n")
+
+    remaining_steps = cfg.total_timesteps - start_step
+    if remaining_steps <= 0:
+        print("  L'agent a déjà atteint total_timesteps. Rien à entraîner.")
+        return agent, episode_rewards, losses
+
+    # ─── Accumulateurs épisodiques ────────────────────────────────────────────
+    episode_reward = 0.0
+    ep_len = 0
+
     t_start = time.perf_counter()
-    steps_at_last_log = 0
 
     print(f"\n{'='*65}")
     print(f"  DQN Training — {cfg.env_id}  |  {cfg.total_timesteps:,} steps  |  seed {cfg.seed}")
     print(f"  Device : {agent.device}  |  Buffer : {cfg.buffer_capacity:,}  |  lr : {cfg.learning_rate}")
+    if resume_from:
+        print(f"  Résumé depuis   : {resume_from}  (step {start_step:,})")
     print(f"{'='*65}\n")
 
     pbar = tqdm(
         total=cfg.total_timesteps,
+        initial=start_step,
         unit="step",
         dynamic_ncols=True,
         colour="green",
     )
 
-    for step in range(cfg.total_timesteps):
+    for step in range(start_step, cfg.total_timesteps):
         agent.global_step = step
 
-        # ε-greedy action selection
         action = agent.select_action(obs)
         next_obs, reward, terminated, truncated, _ = env.step(action)
         done = terminated or truncated
 
-        # Store transition; use `terminated` (not `done`) so the bootstrap
-        # target is zero only on true terminal states, not on time-outs.
         agent.buffer.push(obs, action, reward, next_obs, float(terminated))
         obs = next_obs
         episode_reward += reward
@@ -78,30 +100,25 @@ def train_highway_dqn(cfg: HighwayDQNConfig):
             ep_len = 0
             obs, _ = env.reset()
 
-        # Gradient update (delayed start so the buffer has enough samples)
         if step >= cfg.learning_starts and step % cfg.train_frequency == 0:
             loss = agent.update()
             if loss is not None:
                 losses.append(loss)
 
-        # Hard target-network sync
         if step % cfg.target_update_frequency == 0:
             agent.sync_target_network()
 
-        # Periodic checkpoint
-        if step % cfg.checkpoint_frequency == 0 and step > 0:
+        if step % cfg.checkpoint_frequency == 0 and step > start_step:
             ckpt_path = agent.save_checkpoint(tag=f"step{step}")
             tqdm.write(f"  ✔ Checkpoint saved → {ckpt_path}")
 
-        # Detailed console log
-        if step % LOG_FREQ == 0 and step > 0 and episode_rewards:
+        if step % LOG_FREQ == 0 and step > start_step and episode_rewards:
             elapsed = time.perf_counter() - t_start
-            sps = (step - steps_at_last_log) / max(elapsed - (steps_at_last_log / max(step, 1) * elapsed), 1e-6)
-            sps = (step + 1) / elapsed  # simpler: global average steps/sec
+            sps = (step - start_step + 1) / elapsed
 
-            mean_r   = np.mean(episode_rewards[-20:])
-            best_r   = np.max(episode_rewards)
-            mean_len = np.mean(ep_lengths[-20:])
+            mean_r    = np.mean(episode_rewards[-20:])
+            best_r    = np.max(episode_rewards)
+            mean_len  = np.mean(ep_lengths[-20:])
             mean_loss = np.mean(losses[-100:]) if losses else float("nan")
 
             tqdm.write(
@@ -120,15 +137,12 @@ def train_highway_dqn(cfg: HighwayDQNConfig):
     pbar.close()
     env.close()
 
-    # Final checkpoint
     agent.save_checkpoint(tag="final")
 
-    # Save metrics as numpy arrays so evaluation scripts can load them directly
     np.save(f"{cfg.checkpoint_dir}/episode_rewards.npy", np.array(episode_rewards))
-    np.save(f"{cfg.checkpoint_dir}/ep_lengths.npy", np.array(ep_lengths))
-    np.save(f"{cfg.checkpoint_dir}/losses.npy", np.array(losses))
+    np.save(f"{cfg.checkpoint_dir}/ep_lengths.npy",      np.array(ep_lengths))
+    np.save(f"{cfg.checkpoint_dir}/losses.npy",          np.array(losses))
 
-    # Training summary
     elapsed_total = time.perf_counter() - t_start
     print(f"\n{'='*65}")
     print(f"  Training complete in {elapsed_total/60:.1f} min")
@@ -142,8 +156,11 @@ def train_highway_dqn(cfg: HighwayDQNConfig):
     return agent, episode_rewards, losses
 
 
-# ─── Entry point ─────────────────────────────────────────────────────────────
-
 if __name__ == "__main__":
     cfg = HighwayDQNConfig()
-    agent, rewards, losses = train_highway_dqn(cfg)
+
+    # Entraînement from scratch
+    #agent, rewards, losses = train_highway_dqn(cfg)
+
+    # Reprise depuis un checkpoint
+    agent, rewards, losses = train_highway_dqn(cfg, resume_from="checkpoints/dqn_highway_step30000.pt")
