@@ -7,7 +7,7 @@ import highway_env
 from tqdm import tqdm
 
 from ..shared_core_config import SHARED_CORE_CONFIG
-from ..agents.dqn_custom import HighwayDQNConfig, HighwayDQNAgent
+from ..agents.dqn_custom import HighwayDQNConfig, DQNAgent
 
 # Log every N steps — tune down for more granularity, up for quieter output
 LOG_FREQ = 5_000
@@ -16,7 +16,7 @@ LOG_FREQ = 5_000
 # ─── Training loop ────────────────────────────────────────────────────────────
 
 def train_highway_dqn(cfg: HighwayDQNConfig):
-    # Seed everything for reproducibility
+    # Seed for reproducibility
     random.seed(cfg.seed)
     np.random.seed(cfg.seed)
     torch.manual_seed(cfg.seed)
@@ -29,7 +29,7 @@ def train_highway_dqn(cfg: HighwayDQNConfig):
     obs_shape = env.observation_space.shape  # (5, 5): 5 vehicles × 5 kinematic features
     n_actions = env.action_space.n           # 5 discrete meta-actions
 
-    agent = HighwayDQNAgent(cfg, obs_shape, n_actions)
+    agent = DQNAgent(cfg, obs_shape, n_actions)
 
     # Per-episode accumulators
     episode_reward = 0.0

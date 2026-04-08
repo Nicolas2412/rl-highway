@@ -32,7 +32,8 @@ def run_episode(agent_type="random", render=True, model_path=None):
     if agent_type == "random":
         agent = RandomAgent(env.action_space)
     elif agent_type == "dqn_custom":
-        agent = DQN_Custom(env.action_space, env.observation_space)
+        agent = DQNAgent(cfg=HighwayDQNConfig(), obs_shape=env.observation_space.shape, n_actions=env.action_space.n)
+        agent.load_checkpoint(r"checkpoints\dqn_highway_step30000.pt")
     elif agent_type == "sb3":
         agent = SB3Agent(model_path=model_path, action_space=env.action_space, determistic=True)
     else:
@@ -56,9 +57,62 @@ def run_episode(agent_type="random", render=True, model_path=None):
     env.close()
     return total_reward, step
 
+
+def run_parallel_episodes(agent_type="random", num_episodes=50, num_envs=4):
+    envs = gym.vector.AsyncVectorEnv([make_env() for _ in range(num_envs)])
+    obs, info = envs.reset()
+
+    if agent_type == "random":
+        agent = RandomAgent(envs.action_space)
+    elif agent_type == "dqn_custom":
+        obs_shape = envs.observation_space.shape[1:]
+        agent = DQNAgent(cfg=HighwayDQNConfig(), obs_shape=obs_shape, n_actions=envs.action_space.n)
+        agent.load_checkpoint(r"checkpoints\dqn_highway_step30000.pt")
+    elif agent_type == "sb3":
+        raise NotImplementedError("Modèle SB3 non lié.")
+    else:
+        raise ValueError(f"Agent inconnu : {agent_type}")
+
+    completed_episodes = 0
+    rewards_history = []
+    steps_history = []
+
+    current_rewards = np.zeros(num_envs)
+    current_steps = np.zeros(num_envs)
+
+    while completed_episodes < num_episodes:
+        actions = agent.act(obs)
+        obs, reward, terminated, truncated, info = envs.step(actions)
+
+        current_rewards += reward
+        current_steps += 1
+
+        done = terminated | truncated
+        for i in range(num_envs):
+            if done[i]:
+                rewards_history.append(current_rewards[i])
+                steps_history.append(current_steps[i])
+
+                current_rewards[i] = 0
+                current_steps[i] = 0
+                completed_episodes += 1
+
+                if completed_episodes % 10 == 0 or completed_episodes == num_episodes:
+                    print(
+                        f"Épisodes terminés : {completed_episodes}/{num_episodes}")
+
+                if completed_episodes >= num_episodes:
+                    break
+
+    envs.close()
+    return rewards_history[:num_episodes], steps_history[:num_episodes]
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Évaluation des agents sur Highway-env")
+    parser.add_argument("--agent", type=str,
+                        default="random", choices=["random","dqn_custom","sb3"],)
     parser.add_argument("--agent", type=str, default="random", choices=["random", "sb3", "dqn_custom"])
     parser.add_argument("--episodes", type=int, default=1)
     parser.add_argument("--no-render", action="store_true")

@@ -11,8 +11,7 @@ from dataclasses import dataclass, field
 from typing import List
 import matplotlib.pyplot as plt
 
-from ..shared_core_config import SHARED_CORE_ENV_ID, SHARED_CORE_CONFIG
-
+from shared_core_config import SHARED_CORE_ENV_ID, SHARED_CORE_CONFIG
 
 # ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -93,7 +92,7 @@ class ReplayBuffer:
 
 # ─── Agent DQN Highway ───────────────────────────────────────────────────────
 
-class HighwayDQNAgent:
+class DQNAgent:
     def __init__(self, cfg: HighwayDQNConfig, obs_shape, n_actions):
         self.cfg = cfg
         self.n_actions = n_actions
@@ -121,7 +120,11 @@ class HighwayDQNAgent:
         obs_t = torch.tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0)
         with torch.no_grad():
             return self.q_net(obs_t).argmax(dim=1).item()
-
+        
+    def act(self, obs):
+        obs_t = torch.tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0)
+        with torch.no_grad():
+            return self.q_net(obs_t).argmax(dim=1).item()
     def update(self):
         if len(self.buffer) < self.cfg.batch_size:
             return None
