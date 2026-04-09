@@ -38,7 +38,7 @@ def make_env(seed_offset: int = 0):
 
 def train_vectorized(
     cfg: HighwayDQNConfig,
-    num_envs: int = 4,
+    num_envs: int = 2,
     resume_from: Optional[str] = None,
 ):
     random.seed(cfg.seed)
@@ -160,5 +160,6 @@ def train_vectorized(
 
 
 if __name__ == "__main__":
-    cfg = HighwayDQNConfig(total_timesteps=200_000)
-    train_vectorized(cfg, num_envs=4)
+
+    cfg = HighwayDQNConfig(total_timesteps=200_000)    
+    train_vectorized(cfg, num_envs=2, resume_from=None)
