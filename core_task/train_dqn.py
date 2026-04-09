@@ -1,36 +1,61 @@
+"""
+Entraînement DQN vectorisé sur highway-v0.
+
+Principe : N environnements AsyncVectorEnv tournent en parallèle (sous-processus).
+À chaque step global, on collecte N transitions simultanément, ce qui :
+  - diversifie le replay buffer N fois plus vite ;
+  - réduit la corrélation temporelle entre transitions consécutives ;
+  - n'augmente PAS le nombre de mises à jour réseau (on reste à 1 update/step global).
+
+AsyncVectorEnv renvoie (obs, reward, terminated, truncated, info).
+On stocke `terminated` dans le buffer (masque de bootstrap), et on reset sur
+`terminated | truncated`.
+"""
+
 import random
 import time
 import numpy as np
 import torch
 import gymnasium as gym
-import highway_env  
+import highway_env  # noqa: F401
 from tqdm import tqdm
 from typing import Optional
 
-from shared_core_config import SHARED_CORE_CONFIG
+from shared_core_config import SHARED_CORE_CONFIG, SHARED_CORE_ENV_ID
 from agents.dqn_custom import HighwayDQNConfig, DQNAgent
 
 LOG_FREQ = 5_000
 
 
-def train_highway_dqn(
+def make_env(seed_offset: int = 0):
+    def _init():
+        env = gym.make(SHARED_CORE_ENV_ID, render_mode=None)
+        env.unwrapped.configure(SHARED_CORE_CONFIG)
+        env.reset(seed=seed_offset)
+        return env
+    return _init
+
+
+def train_vectorized(
     cfg: HighwayDQNConfig,
+    num_envs: int = 4,
     resume_from: Optional[str] = None,
 ):
     random.seed(cfg.seed)
     np.random.seed(cfg.seed)
     torch.manual_seed(cfg.seed)
 
-    env = gym.make(cfg.env_id)
-    env.unwrapped.configure(SHARED_CORE_CONFIG)
-    obs, _ = env.reset(seed=cfg.seed)
+    envs = gym.vector.AsyncVectorEnv(
+        [make_env(cfg.seed + i) for i in range(num_envs)]
+    )
+    obs, _ = envs.reset(seed=cfg.seed)
 
-    obs_shape = env.observation_space.shape
-    n_actions = env.action_space.n
+    obs_shape = envs.single_observation_space.shape
+    n_actions = envs.single_action_space.n
 
     agent = DQNAgent(cfg, obs_shape, n_actions)
+    print(f"Device : {agent.device} | Envs parallèles : {num_envs}")
 
-    # ─── Reprise depuis checkpoint ────────────────────────────────────────────
     start_step = 0
     episode_rewards: list[float] = []
     ep_lengths: list[int] = []
@@ -39,8 +64,6 @@ def train_highway_dqn(
     if resume_from is not None:
         agent.load_checkpoint(resume_from)
         start_step = agent.global_step
-
-        # Recharge les métriques accumulées si elles existent
         for fname, target in [
             ("episode_rewards.npy", episode_rewards),
             ("ep_lengths.npy",      ep_lengths),
@@ -49,57 +72,50 @@ def train_highway_dqn(
             path = f"{cfg.checkpoint_dir}/{fname}"
             try:
                 target.extend(np.load(path).tolist())
-                print(f"  Métriques chargées : {path} ({len(target)} entrées)")
             except FileNotFoundError:
-                print(f"  Métriques absentes ({fname}), on repart de zéro pour celles-ci")
+                pass
 
-        print(f"\n  Reprise depuis le step {start_step:,} / {cfg.total_timesteps:,}\n")
-
-    remaining_steps = cfg.total_timesteps - start_step
-    if remaining_steps <= 0:
-        print("  L'agent a déjà atteint total_timesteps. Rien à entraîner.")
+    remaining = cfg.total_timesteps - start_step
+    if remaining <= 0:
+        print("total_timesteps déjà atteint.")
+        envs.close()
         return agent, episode_rewards, losses
 
-    # ─── Accumulateurs épisodiques ────────────────────────────────────────────
-    episode_reward = 0.0
-    ep_len = 0
+    # Accumulateurs par env
+    current_rewards = np.zeros(num_envs)
+    current_lengths = np.zeros(num_envs, dtype=int)
 
     t_start = time.perf_counter()
 
-    print(f"\n{'='*65}")
-    print(f"  DQN Training — {cfg.env_id}  |  {cfg.total_timesteps:,} steps  |  seed {cfg.seed}")
-    print(f"  Device : {agent.device}  |  Buffer : {cfg.buffer_capacity:,}  |  lr : {cfg.learning_rate}")
-    if resume_from:
-        print(f"  Résumé depuis   : {resume_from}  (step {start_step:,})")
-    print(f"{'='*65}\n")
-
-    pbar = tqdm(
-        total=cfg.total_timesteps,
-        initial=start_step,
-        unit="step",
-        dynamic_ncols=True,
-        colour="green",
-    )
+    pbar = tqdm(total=cfg.total_timesteps, initial=start_step,
+                unit="step", dynamic_ncols=True, colour="cyan")
 
     for step in range(start_step, cfg.total_timesteps):
         agent.global_step = step
 
-        action = agent.select_action(obs)
-        next_obs, reward, terminated, truncated, _ = env.step(action)
-        done = terminated or truncated
+        actions = agent.select_actions_batch(obs)
+        next_obs, rewards, terminated, truncated, _ = envs.step(actions)
 
-        agent.buffer.push(obs, action, reward, next_obs, float(terminated))
+        # Pousser N transitions dans le buffer
+        for i in range(num_envs):
+            agent.buffer.push(
+                obs[i], actions[i], rewards[i], next_obs[i],
+                float(terminated[i]),      # terminated uniquement pour le masque
+            )
+
         obs = next_obs
-        episode_reward += reward
-        ep_len += 1
+        current_rewards += rewards
+        current_lengths += 1
 
-        if done:
-            episode_rewards.append(episode_reward)
-            ep_lengths.append(ep_len)
-            episode_reward = 0.0
-            ep_len = 0
-            obs, _ = env.reset()
+        done_mask = terminated | truncated
+        for i in range(num_envs):
+            if done_mask[i]:
+                episode_rewards.append(current_rewards[i])
+                ep_lengths.append(current_lengths[i])
+                current_rewards[i] = 0.0
+                current_lengths[i] = 0
 
+        # Mise à jour du réseau
         if step >= cfg.learning_starts and step % cfg.train_frequency == 0:
             loss = agent.update()
             if loss is not None:
@@ -109,34 +125,25 @@ def train_highway_dqn(
             agent.sync_target_network()
 
         if step % cfg.checkpoint_frequency == 0 and step > start_step:
-            ckpt_path = agent.save_checkpoint(tag=f"step{step}")
-            tqdm.write(f"  ✔ Checkpoint saved → {ckpt_path}")
+            ckpt = agent.save_checkpoint(tag=f"step{step}")
+            tqdm.write(f"  Checkpoint → {ckpt}")
 
         if step % LOG_FREQ == 0 and step > start_step and episode_rewards:
             elapsed = time.perf_counter() - t_start
             sps = (step - start_step + 1) / elapsed
-
             mean_r    = np.mean(episode_rewards[-20:])
-            best_r    = np.max(episode_rewards)
-            mean_len  = np.mean(ep_lengths[-20:])
             mean_loss = np.mean(losses[-100:]) if losses else float("nan")
-
             tqdm.write(
-                f"  step {step:>7,} / {cfg.total_timesteps:,} "
-                f"| ε {agent.get_epsilon():.3f} "
-                f"| R̄₂₀ {mean_r:+.3f}  best {best_r:+.3f} "
-                f"| len̄₂₀ {mean_len:5.1f} "
-                f"| loss̄ {mean_loss:.4f} "
-                f"| buf {len(agent.buffer):>6,} "
-                f"| ep #{len(episode_rewards):>5,} "
+                f"  step {step:>7,} | ε {agent.get_epsilon():.3f} "
+                f"| R̄₂₀ {mean_r:+.3f} | loss̄ {mean_loss:.4f} "
+                f"| buf {len(agent.buffer):>6,} | ep #{len(episode_rewards):>5,} "
                 f"| {sps:,.0f} sps"
             )
 
         pbar.update(1)
 
     pbar.close()
-    env.close()
-
+    envs.close()
     agent.save_checkpoint(tag="final")
 
     np.save(f"{cfg.checkpoint_dir}/episode_rewards.npy", np.array(episode_rewards))
@@ -144,23 +151,14 @@ def train_highway_dqn(
     np.save(f"{cfg.checkpoint_dir}/losses.npy",          np.array(losses))
 
     elapsed_total = time.perf_counter() - t_start
-    print(f"\n{'='*65}")
-    print(f"  Training complete in {elapsed_total/60:.1f} min")
-    print(f"  Episodes         : {len(episode_rewards)}")
-    print(f"  Mean reward      : {np.mean(episode_rewards):.3f} ± {np.std(episode_rewards):.3f}")
-    print(f"  Best episode     : {np.max(episode_rewards):.3f}")
-    print(f"  Mean ep. length  : {np.mean(ep_lengths):.1f} steps")
-    print(f"  Metrics saved to : {cfg.checkpoint_dir}/")
-    print(f"{'='*65}\n")
+    print(f"\nTraining terminé en {elapsed_total/60:.1f} min")
+    print(f"Épisodes : {len(episode_rewards)} | "
+          f"R̄ : {np.mean(episode_rewards):.3f} ± {np.std(episode_rewards):.3f} | "
+          f"Best : {np.max(episode_rewards):.3f}")
 
     return agent, episode_rewards, losses
 
 
 if __name__ == "__main__":
-    cfg = HighwayDQNConfig()
-
-    # Entraînement from scratch
-    #agent, rewards, losses = train_highway_dqn(cfg)
-
-    # Reprise depuis un checkpoint
-    agent, rewards, losses = train_highway_dqn(cfg, resume_from="checkpoints/dqn_highway_step30000.pt")
+    cfg = HighwayDQNConfig(total_timesteps=200_000)
+    train_vectorized(cfg, num_envs=4)
