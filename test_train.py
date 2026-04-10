@@ -1,9 +1,8 @@
 import gymnasium as gym
 import highway_env
 import os
-
 from agents.dqn_sb3 import SB3DQNAgent 
-from agents.dqn_custom import DQNAgent
+from agents.dqn_custom import DQNAgent, HighwayDQNConfig
 
 from shared_core_config import SHARED_CORE_ENV_ID, SHARED_CORE_CONFIG 
 
@@ -54,18 +53,21 @@ def test_training(agent_type:str,
             verbose=1
         )
     elif agent_type == "dqn_custom":
-        agent = DQNAgent(
-            action_space=env.action_space,
-            observation_space=env.observation_space,
-            gamma=gamma,
-            batch_size=batch_size,
-            buffer_capacity=buffer_capacity,
-            update_target_every=update_target_every,
-            epsilon_start=epsilon_start,
-            decrease_epsilon_factor=decrease_epsilon_factor,
-            epsilon_min=epsilon_min,
-            learning_rate=learning_rate,
-            hidden_size=hidden_size
+        config = HighwayDQNConfig(gamma=gamma,
+                                batch_size=batch_size,
+                                buffer_capacity=buffer_capacity,
+                                target_update_frequency=update_target_every,
+                                hidden_dims=[hidden_size],
+                                epsilon_start=epsilon_start,
+                                epsilon_end=epsilon_min,
+                                total_timesteps=num_episodes * 30,  # Juste une estimation grossière
+                                learning_rate=learning_rate,
+                                
+                                )
+        agent = DQNAgent(cfg=config,
+                         obs_shape=env.observation_space.shape, 
+                         n_actions=env.action_space.n,
+           
         )
     else:
         raise ValueError(f"Agent '{agent_type}' not implemented")

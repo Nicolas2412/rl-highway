@@ -7,7 +7,7 @@ class RandomAgent(BaseAgent):
     def __init__(self, action_space, observation_space, **kwargs):
         self.action_space = action_space
 
-    def act(self, observation):
+    def act(self, obs,epsilon=None)-> int:
         """
         Renvoie une action aléatoire tirée de l'espace d'actions.
         L'observation est ignorée.

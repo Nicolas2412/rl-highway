@@ -13,8 +13,7 @@ On stocke `terminated` dans le buffer (masque de bootstrap), et on reset sur
 
 python -m core_task.train_dqn
 
-
---- Logique de sauvegarde ---
+---- Sauvegarde des résultats -----
 
 checkpoints/
 ├── runs_registry.jsonl              ← registre global de tous les runs
@@ -35,7 +34,7 @@ import random
 import time
 import numpy as np
 import torch
-import gymnasium as gym
+import gymnasium as gym 
 import highway_env  # noqa: F401
 from tqdm import tqdm
 from typing import Optional
@@ -61,7 +60,7 @@ REGISTRY_PATH = os.path.join(WORKING_DIR, "checkpoints/runs_registry.jsonl")
 
 def _cfg_to_dict(cfg: HighwayDQNConfig) -> dict:
     """Sérialise les hyperparamètres du config en dict JSON-compatible."""
-    return dataclasses.asdict(cfg) if dataclasses.is_dataclass(cfg) else vars(cfg)
+    return dataclasses.asdict(cfg) if dataclasses.is_dataclass(cfg) else vars(cfg) #type:ignore
 
 
 def register_run_start(cfg: HighwayDQNConfig, num_envs: int, run_id: str) -> None:
@@ -139,8 +138,7 @@ def train_vectorized(
 ):
     run_id = f"dqn_{TIMESTAMP}"
 
-    # FIX 1 : on aligne cfg.checkpoint_dir sur le répertoire dynamique du run,
-    # afin que agent.save_checkpoint() écrive au bon endroit.
+
     cfg.checkpoint_dir = CHECKPOINT_DIR
     cfg.checkpoint_frequency = getattr(cfg, "checkpoint_frequency", 10_000)
     os.makedirs(CHECKPOINT_DIR, exist_ok=True)
@@ -170,7 +168,6 @@ def train_vectorized(
     ep_lengths: list[int] = []
     losses: list[float] = []
 
-    # FIX 2 : resume_from est un chemin absolu ou relatif à CHECKPOINT_DIR.
     if resume_from is not None:
         resume_path = (
             resume_from
@@ -296,5 +293,5 @@ def train_vectorized(
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    cfg = HighwayDQNConfig()
+    cfg = HighwayDQNConfig(total_timesteps=30)
     train_vectorized(cfg, num_envs=2)
