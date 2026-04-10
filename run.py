@@ -1,3 +1,11 @@
+"""
+Usage : 
+ 
+python -m run --agent dqn_custom --checkpoint "checkpoints/dqn_highway_step70000.pt"
+
+"""
+
+
 import argparse
 import os
 import numpy as np
@@ -18,7 +26,7 @@ def make_env():
     return _init
 
 
-def run_episode(agent_type="random", render=True):
+def run_episode(agent_type="random", render=True, checkpoint_to_load = None):
     render_mode = "human" if render else None
     env = gym.make(SHARED_CORE_ENV_ID, render_mode=render_mode)
     env.unwrapped.configure(SHARED_CORE_CONFIG)
@@ -29,7 +37,8 @@ def run_episode(agent_type="random", render=True):
         agent = RandomAgent(env.action_space)
     elif agent_type == "dqn_custom":
         agent = DQNAgent(cfg=HighwayDQNConfig(), obs_shape=env.observation_space.shape, n_actions=env.action_space.n)
-        agent.load_checkpoint(r"checkpoints\dqn_highway_step110000.pt")
+        if checkpoint_to_load :
+            agent.load_checkpoint(checkpoint_to_load)
     elif agent_type == "sb3":
         raise NotImplementedError("Modèle SB3 non lié.")
     else:
@@ -114,6 +123,7 @@ if __name__ == "__main__":
     parser.add_argument("--num-envs", type=int, default=4,
                         help="Nombre d'environnements parallèles")
 
+    parser.add_argument("--checkpoint", type = str, default = r"checkpoints\dqn_highway_step110000.pt")
     args = parser.parse_args()
     render = not args.no_render
 
@@ -124,7 +134,7 @@ if __name__ == "__main__":
         rewards = []
         steps = []
         for i in range(args.episodes):
-            reward, step = run_episode(agent_type=args.agent, render=render)
+            reward, step = run_episode(agent_type=args.agent, render=render, checkpoint_to_load=args.checkpoint)
             rewards.append(reward)
             steps.append(step)
             if args.episodes <= 10 or (i + 1) % 5 == 0:

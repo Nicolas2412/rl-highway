@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.optim as optim
 from collections import deque
 from dataclasses import dataclass, field
-from typing import List
+from typing import Any, List
 import time
 
 
@@ -27,8 +27,12 @@ class HighwayDQNConfig:
     epsilon_end: float = 0.01
     epsilon_decay_steps: int = 100_000
     double_dqn: bool = False          # Double DQN : réduit le biais de maximisation
-    checkpoint_dir: str = "./rl-highway/checkpoints"
+    checkpoint_dir: str = "../rl-highway/checkpoints"
     checkpoint_frequency: int = 10_000
+
+
+    def __init__(self) -> None:
+        pass
 
 
 class HighwayQNetwork(nn.Module):

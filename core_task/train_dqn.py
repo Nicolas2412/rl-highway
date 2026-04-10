@@ -10,8 +10,12 @@ Principe : N environnements AsyncVectorEnv tournent en parallèle (sous-processu
 AsyncVectorEnv renvoie (obs, reward, terminated, truncated, info).
 On stocke `terminated` dans le buffer (masque de bootstrap), et on reset sur
 `terminated | truncated`.
+
+python -m core_task.train_dqn
 """
 
+import dataclasses
+import json
 import random
 import time
 import numpy as np
@@ -20,11 +24,84 @@ import gymnasium as gym
 import highway_env  # noqa: F401
 from tqdm import tqdm
 from typing import Optional
-
+import os
 from shared_core_config import SHARED_CORE_CONFIG, SHARED_CORE_ENV_ID
 from agents.dqn_custom import HighwayDQNConfig, DQNAgent
 
+TIMESTAMP = time.strftime("%Y%m%d-%H%M%S")
+
 LOG_FREQ = 5_000
+WORKING_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# Répertoire propre à ce run : checkpoints/dqn_YYYYMMDD-HHMMSS/
+CHECKPOINT_DIR = os.path.join(WORKING_DIR, f"checkpoints/dqn_{TIMESTAMP}")
+
+# Registre centralisé de tous les runs, à la racine de checkpoints/
+REGISTRY_PATH = os.path.join(WORKING_DIR, "checkpoints/runs_registry.jsonl")
+
+
+# ---------------------------------------------------------------------------
+# Helpers de logging
+# ---------------------------------------------------------------------------
+
+def _cfg_to_dict(cfg: HighwayDQNConfig) -> dict:
+    """Sérialise les hyperparamètres du config en dict JSON-compatible."""
+    return dataclasses.asdict(cfg) if dataclasses.is_dataclass(cfg) else vars(cfg)
+
+
+def register_run_start(cfg: HighwayDQNConfig, num_envs: int, run_id: str) -> None:
+    """
+    Écrit une entrée dans runs_registry.jsonl au démarrage du run.
+    Le champ 'status' vaut 'running' ; il sera mis à jour à la fin.
+    """
+    os.makedirs(os.path.dirname(REGISTRY_PATH), exist_ok=True)
+    entry = {
+        "run_id":     run_id,
+        "status":     "running",
+        "started_at": TIMESTAMP,
+        "ended_at":   None,
+        "num_envs":   num_envs,
+        "checkpoint_dir": CHECKPOINT_DIR,
+        "hyperparameters": _cfg_to_dict(cfg),
+        "results": None,
+    }
+    with open(REGISTRY_PATH, "a") as f:
+        f.write(json.dumps(entry) + "\n")
+
+
+def register_run_end(
+    run_id: str,
+    episode_rewards: list,
+    final_checkpoint: str,
+) -> None:
+    """
+    Relit le registre, met à jour l'entrée du run courant, et réécrit le fichier.
+    On relit entièrement pour préserver les entrées des autres runs.
+    """
+    if not os.path.exists(REGISTRY_PATH):
+        return
+
+    with open(REGISTRY_PATH, "r") as f:
+        lines = f.readlines()
+
+    updated_lines = []
+    for line in lines:
+        entry = json.loads(line)
+        if entry["run_id"] == run_id:
+            entry["status"]           = "done"
+            entry["ended_at"]         = time.strftime("%Y%m%d-%H%M%S")
+            entry["final_checkpoint"] = final_checkpoint
+            entry["results"] = {
+                "n_episodes":   len(episode_rewards),
+                "mean_reward":  round(float(np.mean(episode_rewards)), 4),
+                "std_reward":   round(float(np.std(episode_rewards)),  4),
+                "best_reward":  round(float(np.max(episode_rewards)),  4),
+                "worst_reward": round(float(np.min(episode_rewards)),  4),
+            }
+        updated_lines.append(json.dumps(entry) + "\n")
+
+    with open(REGISTRY_PATH, "w") as f:
+        f.writelines(updated_lines)
 
 
 def make_env(seed_offset: int = 0):
@@ -36,11 +113,18 @@ def make_env(seed_offset: int = 0):
     return _init
 
 
+# ---------------------------------------------------------------------------
+# Boucle d'entraînement
+# ---------------------------------------------------------------------------
+
 def train_vectorized(
     cfg: HighwayDQNConfig,
     num_envs: int = 2,
     resume_from: Optional[str] = None,
 ):
+    # run_id = identifiant unique et lisible du run
+    run_id = f"dqn_{TIMESTAMP}"
+
     random.seed(cfg.seed)
     np.random.seed(cfg.seed)
     torch.manual_seed(cfg.seed)
@@ -55,6 +139,12 @@ def train_vectorized(
 
     agent = DQNAgent(cfg, obs_shape, n_actions)
     print(f"Device : {agent.device} | Envs parallèles : {num_envs}")
+    print(f"Run ID : {run_id}")
+    print(f"Checkpoints → {CHECKPOINT_DIR}")
+    print(f"Registre    → {REGISTRY_PATH}")
+
+    # Enregistrement du run dans le registre dès le démarrage
+    register_run_start(cfg, num_envs, run_id)
 
     start_step = 0
     episode_rewards: list[float] = []
@@ -62,7 +152,8 @@ def train_vectorized(
     losses: list[float] = []
 
     if resume_from is not None:
-        agent.load_checkpoint(resume_from)
+        resume_path = os.path.join(CHECKPOINT_DIR, resume_from)
+        agent.load_checkpoint(resume_path)
         start_step = agent.global_step
         for fname, target in [
             ("episode_rewards.npy", episode_rewards),
@@ -81,7 +172,6 @@ def train_vectorized(
         envs.close()
         return agent, episode_rewards, losses
 
-    # Accumulateurs par env
     current_rewards = np.zeros(num_envs)
     current_lengths = np.zeros(num_envs, dtype=int)
 
@@ -96,11 +186,10 @@ def train_vectorized(
         actions = agent.select_actions_batch(obs)
         next_obs, rewards, terminated, truncated, _ = envs.step(actions)
 
-        # Pousser N transitions dans le buffer
         for i in range(num_envs):
             agent.buffer.push(
                 obs[i], actions[i], rewards[i], next_obs[i],
-                float(terminated[i]),      # terminated uniquement pour le masque
+                float(terminated[i]),
             )
 
         obs = next_obs
@@ -115,51 +204,4 @@ def train_vectorized(
                 current_rewards[i] = 0.0
                 current_lengths[i] = 0
 
-        # Mise à jour du réseau
-        if step >= cfg.learning_starts and step % cfg.train_frequency == 0:
-            loss = agent.update()
-            if loss is not None:
-                losses.append(loss)
-
-        if step % cfg.target_update_frequency == 0:
-            agent.sync_target_network()
-
-        if step % cfg.checkpoint_frequency == 0 and step > start_step:
-            ckpt = agent.save_checkpoint(tag=f"step{step}")
-            tqdm.write(f"  Checkpoint → {ckpt}")
-
-        if step % LOG_FREQ == 0 and step > start_step and episode_rewards:
-            elapsed = time.perf_counter() - t_start
-            sps = (step - start_step + 1) / elapsed
-            mean_r    = np.mean(episode_rewards[-20:])
-            mean_loss = np.mean(losses[-100:]) if losses else float("nan")
-            tqdm.write(
-                f"  step {step:>7,} | ε {agent.get_epsilon():.3f} "
-                f"| R̄₂₀ {mean_r:+.3f} | loss̄ {mean_loss:.4f} "
-                f"| buf {len(agent.buffer):>6,} | ep #{len(episode_rewards):>5,} "
-                f"| {sps:,.0f} sps"
-            )
-
-        pbar.update(1)
-
-    pbar.close()
-    envs.close()
-    agent.save_checkpoint(tag="final")
-
-    np.save(f"{cfg.checkpoint_dir}/episode_rewards.npy", np.array(episode_rewards))
-    np.save(f"{cfg.checkpoint_dir}/ep_lengths.npy",      np.array(ep_lengths))
-    np.save(f"{cfg.checkpoint_dir}/losses.npy",          np.array(losses))
-
-    elapsed_total = time.perf_counter() - t_start
-    print(f"\nTraining terminé en {elapsed_total/60:.1f} min")
-    print(f"Épisodes : {len(episode_rewards)} | "
-          f"R̄ : {np.mean(episode_rewards):.3f} ± {np.std(episode_rewards):.3f} | "
-          f"Best : {np.max(episode_rewards):.3f}")
-
-    return agent, episode_rewards, losses
-
-
-if __name__ == "__main__":
-
-    cfg = HighwayDQNConfig(total_timesteps=200_000)    
-    train_vectorized(cfg, num_envs=2, resume_from=None)
+        if step >= cfg.learning_starts and step % cfg.train_frequency =
