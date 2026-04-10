@@ -1,5 +1,15 @@
+<<<<<<< HEAD
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="pygame")
+=======
+"""
+Usage : 
+ 
+python -m run --agent dqn_custom --checkpoint "checkpoints/dqn_highway_step70000.pt"
+
+"""
+
+>>>>>>> 310dd4f ([Docs] Improve log of dqn training)
 
 import argparse
 import os
@@ -22,7 +32,11 @@ def make_env():
     return _init
 
 
+<<<<<<< HEAD
 def run_episode(agent_type="random", render=True, model_path=None):
+=======
+def run_episode(agent_type="random", render=True, checkpoint_to_load = None):
+>>>>>>> 310dd4f ([Docs] Improve log of dqn training)
     render_mode = "human" if render else None
     env = gym.make(SHARED_CORE_ENV_ID, render_mode=render_mode)
     env.unwrapped.configure(SHARED_CORE_CONFIG)
@@ -33,7 +47,8 @@ def run_episode(agent_type="random", render=True, model_path=None):
         agent = RandomAgent(env.action_space)
     elif agent_type == "dqn_custom":
         agent = DQNAgent(cfg=HighwayDQNConfig(), obs_shape=env.observation_space.shape, n_actions=env.action_space.n)
-        agent.load_checkpoint(r"checkpoints\dqn_highway_step110000.pt")
+        if checkpoint_to_load :
+            agent.load_checkpoint(checkpoint_to_load)
     elif agent_type == "sb3":
         agent = SB3Agent(model_path=model_path, action_space=env.action_space, determistic=True)
     else:
@@ -117,11 +132,13 @@ if __name__ == "__main__":
     parser.add_argument("--episodes", type=int, default=1)
     parser.add_argument("--no-render", action="store_true")
 
+    parser.add_argument("--checkpoint", type = str, default = r"checkpoints\dqn_highway_step110000.pt")
     args = parser.parse_args()
     render = not args.no_render
 
     print(f"Lancement de {args.episodes} épisode(s) avec l'agent '{args.agent}'...")
 
+<<<<<<< HEAD
     # model_path = f"results/models/{args.agent}/{args.name}.zip"
     model_path = f"results/models/test.zip"
     if not os.path.exists(model_path) and args.agent != "random":
@@ -152,6 +169,25 @@ if __name__ == "__main__":
     #         num_envs=args.num_envs,
     #         model_path=model_path
     #     )
+=======
+    if render:
+        rewards = []
+        steps = []
+        for i in range(args.episodes):
+            reward, step = run_episode(agent_type=args.agent, render=render, checkpoint_to_load=args.checkpoint)
+            rewards.append(reward)
+            steps.append(step)
+            if args.episodes <= 10 or (i + 1) % 5 == 0:
+                print(
+                    f"Épisode {i+1}/{args.episodes} - Récompense : {reward:.2f} - Étapes : {step}")
+    else:
+        print(f"Mode parallèle activé sur {args.num_envs} processus.")
+        rewards, steps = run_parallel_episodes(
+            agent_type=args.agent,
+            num_episodes=args.episodes,
+            num_envs=args.num_envs
+        )
+>>>>>>> 310dd4f ([Docs] Improve log of dqn training)
 
     if args.episodes > 0:
         print("\n--- Statistiques Globales ---")

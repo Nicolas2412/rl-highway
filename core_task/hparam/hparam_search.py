@@ -2,8 +2,8 @@
 Recherche d'hyperparamètres DQN avec Optuna.
 
 Usage :
-    python hparam_search.py --n-trials 20
-    python hparam_search.py --n-trials 20 --fresh   # repart d'une étude vierge
+
+    python -m core_task.hparam.hparam_search --n-trials 20 --fresh
 """
 
 import argparse
@@ -22,7 +22,7 @@ from tqdm import tqdm
 from shared_core_config import SHARED_CORE_CONFIG, SHARED_CORE_ENV_ID
 from agents.dqn_custom import DQNAgent, HighwayDQNConfig
 
-TRIAL_STEPS = 40_000
+TRIAL_STEPS = 10_000
 RESULTS_DIR = "hparam_results"
 DB_PATH     = os.path.join(RESULTS_DIR, "optuna_study.db")
 STUDY_NAME  = "highway_dqn"
