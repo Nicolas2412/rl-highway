@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Vectorized training entrypoint for simple DQN + Prioritized Experience Replay.
 
