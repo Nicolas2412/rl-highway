@@ -1,7 +1,10 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="pygame")
 =======
+=======
+>>>>>>> 310dd4f8b4f2ea2d862cce6cc01b1f86ef6c2187
 """
 Usage : 
  
@@ -9,7 +12,10 @@ python -m run --agent dqn_custom --checkpoint "checkpoints/dqn_highway_step70000
 
 """
 
+<<<<<<< HEAD
 >>>>>>> 310dd4f ([Docs] Improve log of dqn training)
+=======
+>>>>>>> 310dd4f8b4f2ea2d862cce6cc01b1f86ef6c2187
 
 import argparse
 import os
@@ -17,8 +23,13 @@ import numpy as np
 import gymnasium as gym
 from shared_core_config import SHARED_CORE_ENV_ID, SHARED_CORE_CONFIG
 from agents.random_agent import RandomAgent
+<<<<<<< HEAD
 from agents.dqn_sb3 import SB3Agent
 from agents.dqn_custom import DQNAgent
+=======
+from agents.dqn_custom import DQNAgent, HighwayDQNConfig
+# from agents.sb3_agent import SB3Agent
+>>>>>>> 310dd4f8b4f2ea2d862cce6cc01b1f86ef6c2187
 import highway_env
 from tqdm import tqdm
 
@@ -33,10 +44,14 @@ def make_env():
 
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 def run_episode(agent_type="random", render=True, model_path=None):
 =======
 def run_episode(agent_type="random", render=True, checkpoint_to_load = None):
 >>>>>>> 310dd4f ([Docs] Improve log of dqn training)
+=======
+def run_episode(agent_type="random", render=True, checkpoint_to_load = None):
+>>>>>>> 310dd4f8b4f2ea2d862cce6cc01b1f86ef6c2187
     render_mode = "human" if render else None
     env = gym.make(SHARED_CORE_ENV_ID, render_mode=render_mode)
     env.unwrapped.configure(SHARED_CORE_CONFIG)
@@ -128,7 +143,10 @@ if __name__ == "__main__":
         description="Évaluation des agents sur Highway-env")
     parser.add_argument("--agent", type=str,
                         default="random", choices=["random","dqn_custom","sb3"],)
+<<<<<<< HEAD
     parser.add_argument("--agent", type=str, default="random", choices=["random", "sb3", "dqn_custom"])
+=======
+>>>>>>> 310dd4f8b4f2ea2d862cce6cc01b1f86ef6c2187
     parser.add_argument("--episodes", type=int, default=1)
     parser.add_argument("--no-render", action="store_true")
 
