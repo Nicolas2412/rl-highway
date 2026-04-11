@@ -40,6 +40,10 @@ import highway_env  # noqa: F401
 from tqdm import tqdm
 from typing import Optional
 import os
+import sys
+current_dir = os.path.dirname(os.path.abspath(__file__))
+root_dir = os.path.dirname(current_dir)
+sys.path.append(root_dir)
 from shared_core_config import SHARED_CORE_CONFIG, SHARED_CORE_ENV_ID
 from agents.dqn_custom import HighwayDQNConfig, DQNAgent
 
