@@ -4,20 +4,27 @@ import matplotlib.pyplot as plt
 import numpy as np
 import gymnasium as gym
 import highway_env
-from shared_core_config import SHARED_CORE_ENV_ID, SHARED_CORE_CONFIG
-from core_task.evaluate import evaluate_over_seeds
-from agents.random_agent import RandomAgent
-from agents.dqn_custom import DQN_Custom
 
-SEEDS = [42, 123, 777]
+from shared_core_config import (
+    SHARED_CORE_ENV_ID, 
+    SHARED_CORE_CONFIG, 
+    SHARED_SEED, 
+    DQN_CUSTOM_PARAMS, 
+    DQN_SB3_PARAMS
+)
+from evaluate import evaluate_over_seeds
+from agents.random_agent import RandomAgent
+from agents.dqn_custom import DQNAgent 
+from agents.dqn_sb3 import SB3DQNAgent
+
+SEEDS = [SHARED_SEED, 123, 777] 
 
 def make_env():
     env = gym.make(SHARED_CORE_ENV_ID, render_mode=None)
     env.unwrapped.configure(SHARED_CORE_CONFIG)
-    env.reset()
+    env.reset(seed=SHARED_SEED)
     return env
 
-# ← the only place agent differences are declared
 AGENT_REGISTRY = [
     {
         "name": "Random",
@@ -28,10 +35,17 @@ AGENT_REGISTRY = [
     },
     {
         "name": "DQN Custom",
-        "cls": DQN_Custom,
-        "kwargs": {},
+        "cls": DQNAgent,
+        "kwargs": DQN_CUSTOM_PARAMS,
         "train_episodes": 500,
-        "weights_path": "weights/dqn_seed{seed}.pth",
+        "weights_path": "weights/dqn_custom_seed{seed}.pth",
+    },
+    {
+        "name": "DQN SB3",
+        "cls": SB3DQNAgent,
+        "kwargs": DQN_SB3_PARAMS,
+        "train_episodes": 500,
+        "weights_path": "weights/dqn_sb3_seed{seed}.zip",
     },
 ]
 

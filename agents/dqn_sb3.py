@@ -1,6 +1,7 @@
 from agents.base_agent import BaseAgent
 from stable_baselines3 import DQN
 from callbacks import HighwayMetricsCallback
+from shared_core_config import DQN_SB3_PARAMS
 
 class SB3DQNAgent(BaseAgent):
     def __init__(self, env=None, model_path=None, tensorboard_log="results/logs/dqn_sb3/", **kwargs):
@@ -12,8 +13,11 @@ class SB3DQNAgent(BaseAgent):
         if model_path is not None:
             self.model = DQN.load(model_path, env=env)
         elif env is not None:
-            # Transfert des hyperparamètres SB3 via kwargs (learning_rate, buffer_size, etc.)
-            self.model = DQN("MlpPolicy", env, tensorboard_log=tensorboard_log, **kwargs)
+            combined_params = {**DQN_SB3_PARAMS, **kwargs}
+            # Remove 'policy' from dict if passing it as a positional arg
+            policy = combined_params.pop("policy", "MlpPolicy")
+            
+            self.model = DQN(policy, env, tensorboard_log=tensorboard_log, **combined_params)
         else:
             raise ValueError("Il faut fournir soit un 'env' soit un 'model_path'.")
 
