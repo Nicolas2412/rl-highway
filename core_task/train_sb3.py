@@ -5,8 +5,8 @@ import time
 current_dir = os.path.dirname(os.path.abspath(__file__))
 root_dir = os.path.dirname(current_dir)
 sys.path.append(root_dir)
-# from shared_core_config import SHARED_CORE_ENV_ID, SHARED_CORE_CONFIG
-from training_config_sb3 import TRAIN_ENV_ID, TRAIN_CONFIG
+from shared_core_config import SHARED_CORE_ENV_ID, SHARED_CORE_CONFIG
+# from training_config_sb3 import TRAIN_ENV_ID, TRAIN_CONFIG
 
 import argparse
 import os
@@ -58,42 +58,10 @@ class HighwayMetricsCallback(BaseCallback):
         return True
 
 
-class DecayLaneChangeWrapper(gym.Wrapper):
-    """
-    Wrapper qui ajoute un bonus aux changements de file, 
-    lequel diminue linéairement au fil des étapes.
-    """
-    def __init__(self, env, total_decay_steps=200000, initial_bonus=0.5, final_bonus=0.05):
-        super().__init__(env)
-        self.total_decay_steps = total_decay_steps
-        self.initial_bonus = initial_bonus
-        self.final_bonus = final_bonus
-        self.current_step = 0
-
-    def step(self, action):
-        obs, reward, terminated, truncated, info = self.env.step(action)
-        
-        if action in [0, 2]:
-            fraction = min(1.0, self.current_step / self.total_decay_steps)
-            
-            # Interpolation linéaire : on part de initial, on arrive à final
-            bonus = self.initial_bonus + (self.final_bonus - self.initial_bonus) * fraction
-            reward += bonus
-            
-        self.current_step += 1
-        return obs, reward, terminated, truncated, info
-
-    def reset(self, **kwargs):
-        # On ne réinitialise PAS current_step ici si on veut que le bonus 
-        # diminue sur toute la durée de l'entraînement, pas par épisode.
-        return self.env.reset(**kwargs)
-    
-    
-def make_env(total_decay_steps:int):
+def make_env():
     def _init():
-        env = gym.make(TRAIN_ENV_ID)
-        env.unwrapped.configure(TRAIN_CONFIG)
-        env = DecayLaneChangeWrapper(env, total_decay_steps=total_decay_steps, initial_bonus=0.05, final_bonus=0.05)
+        env = gym.make(SHARED_CORE_ENV_ID)
+        env.unwrapped.configure(SHARED_CORE_CONFIG)
         env.reset() 
         
         return Monitor(env)
@@ -104,7 +72,7 @@ def train(save_path, steps=5000, num_envs=4, save_freq=10000, load_path=None):
     print(f"Initialisation de {num_envs} env pour {steps} steps...")
 
     # Utilisation d'environnements vectorisés pour accélérer l'entraînement
-    env = SubprocVecEnv([make_env(total_decay_steps = 250000/num_envs) for _ in range(num_envs)])
+    env = SubprocVecEnv([make_env() for _ in range(num_envs)])
     checkpoint_callback = CheckpointCallback(
         save_freq=max(save_freq // num_envs, 1),
         save_path=f"results/checkpoints/sb3/{save_path.split('/')[-1]}",
