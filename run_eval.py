@@ -31,8 +31,8 @@ if SCRIPT_DIR not in sys.path:
 # Paramètres — modifier ici
 # ---------------------------------------------------------------------------
 
-SEEDS = [9]#, 42, 67]     # Ne pas changer de préference ou recalculer tout si changement
-NUM_EPISODES = 1        # épisodes par seed, si un test avec plus d'episodes et enregistré, ces valeurs seront utilisés
+SEEDS = [9, 42, 67]     # Ne pas changer de préference ou recalculer tout si changement
+NUM_EPISODES = 50        # épisodes par seed, si un test avec plus d'episodes et enregistré, ces valeurs seront utilisés
 FORCE = False           # True = ignore les résultats déja sauvegardés et les remplace
 
 SUMMARY_PATH = os.path.join(SCRIPT_DIR, "results", "eval_summary.json")
@@ -43,15 +43,15 @@ EVAL_REGISTRY = [
         "agent_type": "random",
         "checkpoint": None,
     },
-    {
-        "name":       "DQN Custom",
-        "agent_type": "dqn_custom",
-        "checkpoint": "checkpoints/20260410-112718_dqn_highway/20260410-112718_dqn_highway_final_episodic.pt",
-    },
+    # {
+    #     "name":       "DQN Custom",
+    #     "agent_type": "dqn_custom",
+    #     "checkpoint": "checkpoints/20260410-112718_dqn_highway/20260410-112718_dqn_highway_final_episodic.pt",
+    # },
     {
         "name":       "SB3 DQN",
         "agent_type": "sb3",
-        "checkpoint": "checkpoints/sb3_dqn/sb3_dqn.zip",
+        "checkpoint": "checkpoints/sb3_dqn/sb3_model_opti_60000_steps.zip",
     },
     {
         "name":       "DQN Double",
@@ -67,7 +67,7 @@ EVAL_REGISTRY = [
     {
         "name":       "DQN Double+PER",
         "agent_type": "dqn_per",
-        "checkpoint": "checkpoints/20260412-071853_double_per_dqn/20260412-071853_double_per_dqn_step170000.pt",
+        "checkpoint": "checkpoints/20260412-084516_per_double_dqn/20260412-084516_per_double_dqn_final.pt",
         "double_dqn": True,
     },
 ]

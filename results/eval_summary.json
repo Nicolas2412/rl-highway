@@ -3,14 +3,14 @@
     "name": "Random",
     "agent_type": "random",
     "checkpoint_used": "No Checkpoint",
-    "mean_reward": 18.04887335989607,
+    "mean_reward": 13.324740404590864,
     "std_reward": 0.0,
-    "median_reward": 18.04887335989607,
+    "median_reward": 13.324740404590864,
     "success_rate": 0.0,
-    "mean_length": 22.0,
+    "mean_length": 17.0,
     "std_length": 0.0,
-    "mean_speed": 25.797285826023074,
-    "mean_crash_step": 22.0,
+    "mean_speed": 24.821732578665355,
+    "mean_crash_step": 17.0,
     "seeds": [
       9
     ],
@@ -18,12 +18,12 @@
     "per_seed": [
       {
         "seed": 9,
-        "mean_reward": 18.04887335989607,
+        "mean_reward": 13.324740404590864,
         "std_reward": 0.0,
         "success_rate": 0.0,
-        "mean_length": 22.0,
-        "mean_speed": 25.797285826023074,
-        "mean_crash_step": 22.0
+        "mean_length": 17.0,
+        "mean_speed": 24.821732578665355,
+        "mean_crash_step": 17.0
       }
     ]
   },
@@ -58,15 +58,15 @@
   {
     "name": "SB3 DQN",
     "agent_type": "sb3",
-    "checkpoint_used": "checkpoints/sb3_dqn/sb3_dqn.zip",
-    "mean_reward": 16.02272727272727,
+    "checkpoint_used": "checkpoints/sb3_dqn/sb3_model_opti_60000_steps.zip",
+    "mean_reward": 12.95320822445541,
     "std_reward": 0.0,
-    "median_reward": 16.02272727272727,
+    "median_reward": 12.95320822445541,
     "success_rate": 0.0,
-    "mean_length": 21.0,
+    "mean_length": 14.0,
     "std_length": 0.0,
-    "mean_speed": 24.406680744352396,
-    "mean_crash_step": 21.0,
+    "mean_speed": 28.719874212932105,
+    "mean_crash_step": 14.0,
     "seeds": [
       9
     ],
@@ -74,12 +74,12 @@
     "per_seed": [
       {
         "seed": 9,
-        "mean_reward": 16.02272727272727,
+        "mean_reward": 12.95320822445541,
         "std_reward": 0.0,
         "success_rate": 0.0,
-        "mean_length": 21.0,
-        "mean_speed": 24.406680744352396,
-        "mean_crash_step": 21.0
+        "mean_length": 14.0,
+        "mean_speed": 28.719874212932105,
+        "mean_crash_step": 14.0
       }
     ]
   },
@@ -142,14 +142,14 @@
   {
     "name": "DQN Double+PER",
     "agent_type": "dqn_per",
-    "checkpoint_used": "checkpoints/20260412-071853_double_per_dqn/20260412-071853_double_per_dqn_step170000.pt",
-    "mean_reward": 27.81846221764462,
+    "checkpoint_used": "checkpoints/20260412-084516_per_double_dqn/20260412-084516_per_double_dqn_final.pt",
+    "mean_reward": 29.94239648930644,
     "std_reward": 0.0,
-    "median_reward": 27.81846221764462,
+    "median_reward": 29.94239648930644,
     "success_rate": 1.0,
     "mean_length": 30.0,
     "std_length": 0.0,
-    "mean_speed": 27.9725174702133,
+    "mean_speed": 29.965648331591517,
     "mean_crash_step": null,
     "seeds": [
       9
@@ -158,11 +158,11 @@
     "per_seed": [
       {
         "seed": 9,
-        "mean_reward": 27.81846221764462,
+        "mean_reward": 29.94239648930644,
         "std_reward": 0.0,
         "success_rate": 1.0,
         "mean_length": 30.0,
-        "mean_speed": 27.9725174702133,
+        "mean_speed": 29.965648331591517,
         "mean_crash_step": null
       }
     ]
