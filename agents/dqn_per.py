@@ -240,10 +240,11 @@ class PERDQNAgent(BaseAgent):
         self.save(path)
         return path
 
-    def load_checkpoint(self, path: str) -> None:
+    def load_checkpoint(self, path: str, show:bool=True) -> None:
         checkpoint = torch.load(path, map_location=self.device)
         self.q_net.load_state_dict(checkpoint["q_net"])
         self.target_net.load_state_dict(checkpoint["target_net"])
         self.optimizer.load_state_dict(checkpoint["optimizer"])
         self.global_step = checkpoint["global_step"]
-        print(f"Checkpoint charge depuis {path} (step {self.global_step})")
+        if show:
+            print(f"Checkpoint charge depuis {path} (step {self.global_step})")

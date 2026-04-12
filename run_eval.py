@@ -2,6 +2,8 @@
 Évaluation multi-agents, multi-seeds sur la config de test imposée.
 """
 
+from agents.dqn_custom import DQNAgent, HighwayDQNConfig
+from agents.random_agent import RandomAgent
 from shared_core_config import SHARED_CORE_CONFIG, SHARED_CORE_ENV_ID
 from tqdm import tqdm
 import numpy as np
@@ -11,10 +13,14 @@ import json
 import os
 import sys
 import warnings
+from dataclasses import fields
 
 warnings.filterwarnings("ignore", category=UserWarning, module="pygame")
 
 import highway_env  # noqa: F401
+
+from agents.dqn_per import PERDQNAgent, HighwayPERConfig
+from agents.dqn_sb3 import SB3DQNAgent
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if SCRIPT_DIR not in sys.path:
@@ -25,7 +31,7 @@ if SCRIPT_DIR not in sys.path:
 # Paramètres — modifier ici
 # ---------------------------------------------------------------------------
 
-SEEDS = [9, 42, 67]     # Ne pas changer de préference ou recalculer tout si changement
+SEEDS = [9]#, 42, 67]     # Ne pas changer de préference ou recalculer tout si changement
 NUM_EPISODES = 1        # épisodes par seed, si un test avec plus d'episodes et enregistré, ces valeurs seront utilisés
 FORCE = False           # True = ignore les résultats déja sauvegardés et les remplace
 
@@ -40,28 +46,28 @@ EVAL_REGISTRY = [
     {
         "name":       "DQN Custom",
         "agent_type": "dqn_custom",
-        "checkpoint": "checkpoints/old-runs/20260410-112718_dqn_highway_final_episodic.pt",
+        "checkpoint": "checkpoints/20260410-112718_dqn_highway/20260410-112718_dqn_highway_final_episodic.pt",
     },
     {
         "name":       "SB3 DQN",
         "agent_type": "sb3",
-        "checkpoint": "checkpoints/sb3_dqn/sb3_final.zip",
+        "checkpoint": "checkpoints/sb3_dqn/sb3_dqn.zip",
     },
     {
         "name":       "DQN Double",
         "agent_type": "dqn_custom",
-        "checkpoint": "checkpoints/dqn_20260411-135652/20260412-102004_dqn_highway_step120000",
+        "checkpoint": "checkpoints/dqn_20260411-135652/20260412-102004_dqn_highway_step120000.pt",
         "double_dqn": True,
     },
     {
         "name":       "DQN PER",
         "agent_type": "dqn_per",
-        "checkpoint": "checkpoints/per_dqn_20260411-191026/20260412-021940_per_dqn_final",
+        "checkpoint": "checkpoints/per_dqn_20260411-191026/20260412-021940_per_dqn_final.pt",
     },
     {
         "name":       "DQN Double+PER",
         "agent_type": "dqn_per",
-        "checkpoint": "checkpoints/dqn_per_double-incomplete/20260412-071853_per_dqn_step170000.pt",
+        "checkpoint": "checkpoints/20260412-071853_double_per_dqn/20260412-071853_double_per_dqn_step170000.pt",
         "double_dqn": True,
     },
 ]
@@ -78,33 +84,78 @@ def _make_env() -> gym.Env:
     return env
 
 
+def _get_params_from_registry(checkpoint_path: str, registry_file: str = "runs_registry.jsonl") -> dict:
+    """Cherche l'architecture du modèle dans le fichier de registre d'entraînement."""
+    if not checkpoint_path:
+        return {}
+
+    reg_path = os.path.join(SCRIPT_DIR, registry_file)
+    if not os.path.exists(reg_path):
+        return {}
+
+    folder_name = os.path.basename(os.path.dirname(checkpoint_path))
+    try:
+        with open(reg_path, "r", encoding="utf-8") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                data = json.loads(line)
+                if data.get("run_id") == folder_name:
+                    return data.get("hyperparameters", {})
+
+    except Exception as e:
+
+        print(f"Erreur de lecture du registre : {e}")
+
+    print("[!] Paramètres absents du registry run")
+
+    return {}
+
+
+def _build_config(config_class, params_dict: dict):
+    """
+    Reconstruit l'objet de configuration utilisé pour initialiser les agents
+    """
+    valid_keys = {f.name for f in fields(config_class)}
+    filtered_params = {k: v for k, v in params_dict.items() if k in valid_keys}
+    return config_class(**filtered_params)
+
+
 def _load_agent(entry: dict, env: gym.Env):
     agent_type = entry["agent_type"]
     checkpoint = entry.get("checkpoint")
 
+    reg_params = _get_params_from_registry(checkpoint, "checkpoints/runs_registry.jsonl")
+    merged_params = {**entry, **reg_params}
+
     if agent_type == "random":
-        from agents.random_agent import RandomAgent
         return RandomAgent(action_space=env.action_space,
-                        observation_space=env.observation_space)
+                        observation_space=env.observation_space,
+                           **merged_params)
 
-    if agent_type == "dqn_custom":
-        from agents.dqn_custom import DQNAgent, HighwayDQNConfig
-        cfg = HighwayDQNConfig(double_dqn=entry.get("double_dqn", False))
+    elif agent_type == "dqn_custom":
+        cfg = _build_config(HighwayDQNConfig, merged_params)
         agent = DQNAgent(cfg, env.observation_space.shape, env.action_space.n)
-        agent.load_checkpoint(checkpoint)
+        if checkpoint:
+            agent.load_checkpoint(checkpoint,show=False)
         return agent
 
-    if agent_type == "dqn_per":
-        from agents.dqn_per import PERDQNAgent, HighwayPERConfig
-        cfg = HighwayPERConfig(double_dqn=entry.get("double_dqn", False))
-        agent = PERDQNAgent(
-            cfg, env.observation_space.shape, env.action_space.n)
-        agent.load_checkpoint(checkpoint)
+    elif agent_type == "dqn_per":
+        cfg = _build_config(HighwayPERConfig, merged_params)
+        agent = PERDQNAgent(cfg, env.observation_space.shape, env.action_space.n)
+        if checkpoint:
+            agent.load_checkpoint(checkpoint, show=False)
         return agent
 
-    if agent_type == "sb3":
-        from agents.dqn_sb3 import SB3DQNAgent
-        return SB3DQNAgent(model_path=checkpoint, env=env)
+    elif agent_type == "sb3":
+        cfg = _build_config(HighwayDQNConfig, merged_params)
+
+        if checkpoint:
+            agent = SB3DQNAgent(model_path=checkpoint, env=env)
+        else:
+            agent = SB3DQNAgent(cfg=cfg, env=env)
+
+        return agent
 
     raise ValueError(f"agent_type inconnu : {agent_type}")
 
@@ -208,8 +259,6 @@ def main() -> None:
                 existing_summary = json.load(f)
         except:
             existing_summary = []
-
-    all_results = []
     
     for entry in EVAL_REGISTRY:
         checkpoint_path = entry.get("checkpoint")
@@ -264,6 +313,15 @@ def main() -> None:
                 f"  |  success={result['success_rate']*100:.1f}%")
 
         all_results.append(result)
+        
+        os.makedirs(os.path.dirname(SUMMARY_PATH), exist_ok=True)
+        with open(SUMMARY_PATH, "w", encoding="utf-8") as f:
+            json.dump([{k: r.get(k) for k in
+                        ["name", "agent_type", "checkpoint_used", "mean_reward", "std_reward",
+                        "median_reward", "success_rate", "mean_length", "std_length",
+                         "mean_speed", "mean_crash_step", "seeds", "num_episodes", "per_seed"]}
+                       for r in all_results], f, indent=2)
+            
 
     if not all_results:
         print("Aucun résultat — vérifiez EVAL_REGISTRY.")
@@ -295,14 +353,6 @@ def main() -> None:
                 print("  ".join(v.ljust(w) for v, w in zip(s_row, col_w)))
     print('-'*len(header))
 
-    # Sauvegarde résumé
-    os.makedirs(os.path.dirname(SUMMARY_PATH), exist_ok=True)
-    with open(SUMMARY_PATH, "w", encoding="utf-8") as f:
-        json.dump([{k: r.get(k) for k in
-                    ["name", "agent_type", "checkpoint_used", "mean_reward", "std_reward",
-                    "median_reward", "success_rate", "mean_length", "std_length",
-                     "mean_speed", "mean_crash_step", "seeds", "num_episodes", "per_seed"]}
-                   for r in all_results], f, indent=2)
     print(f"\nRésumé → {SUMMARY_PATH}")
 
 

@@ -1,0 +1,170 @@
+[
+  {
+    "name": "Random",
+    "agent_type": "random",
+    "checkpoint_used": "No Checkpoint",
+    "mean_reward": 18.04887335989607,
+    "std_reward": 0.0,
+    "median_reward": 18.04887335989607,
+    "success_rate": 0.0,
+    "mean_length": 22.0,
+    "std_length": 0.0,
+    "mean_speed": 25.797285826023074,
+    "mean_crash_step": 22.0,
+    "seeds": [
+      9
+    ],
+    "num_episodes": 1,
+    "per_seed": [
+      {
+        "seed": 9,
+        "mean_reward": 18.04887335989607,
+        "std_reward": 0.0,
+        "success_rate": 0.0,
+        "mean_length": 22.0,
+        "mean_speed": 25.797285826023074,
+        "mean_crash_step": 22.0
+      }
+    ]
+  },
+  {
+    "name": "DQN Custom",
+    "agent_type": "dqn_custom",
+    "checkpoint_used": "checkpoints/20260410-112718_dqn_highway/20260410-112718_dqn_highway_final_episodic.pt",
+    "mean_reward": 1.5974290027069837,
+    "std_reward": 0.0,
+    "median_reward": 1.5974290027069837,
+    "success_rate": 0.0,
+    "mean_length": 3.0,
+    "std_length": 0.0,
+    "mean_speed": 21.145343677881083,
+    "mean_crash_step": 3.0,
+    "seeds": [
+      9
+    ],
+    "num_episodes": 1,
+    "per_seed": [
+      {
+        "seed": 9,
+        "mean_reward": 1.5974290027069837,
+        "std_reward": 0.0,
+        "success_rate": 0.0,
+        "mean_length": 3.0,
+        "mean_speed": 21.145343677881083,
+        "mean_crash_step": 3.0
+      }
+    ]
+  },
+  {
+    "name": "SB3 DQN",
+    "agent_type": "sb3",
+    "checkpoint_used": "checkpoints/sb3_dqn/sb3_dqn.zip",
+    "mean_reward": 16.02272727272727,
+    "std_reward": 0.0,
+    "median_reward": 16.02272727272727,
+    "success_rate": 0.0,
+    "mean_length": 21.0,
+    "std_length": 0.0,
+    "mean_speed": 24.406680744352396,
+    "mean_crash_step": 21.0,
+    "seeds": [
+      9
+    ],
+    "num_episodes": 1,
+    "per_seed": [
+      {
+        "seed": 9,
+        "mean_reward": 16.02272727272727,
+        "std_reward": 0.0,
+        "success_rate": 0.0,
+        "mean_length": 21.0,
+        "mean_speed": 24.406680744352396,
+        "mean_crash_step": 21.0
+      }
+    ]
+  },
+  {
+    "name": "DQN Double",
+    "agent_type": "dqn_custom",
+    "checkpoint_used": "checkpoints/dqn_20260411-135652/20260412-102004_dqn_highway_step120000.pt",
+    "mean_reward": 29.949760990676364,
+    "std_reward": 0.0,
+    "median_reward": 29.949760990676364,
+    "success_rate": 1.0,
+    "mean_length": 30.0,
+    "std_length": 0.0,
+    "mean_speed": 29.965648331591517,
+    "mean_crash_step": null,
+    "seeds": [
+      9
+    ],
+    "num_episodes": 1,
+    "per_seed": [
+      {
+        "seed": 9,
+        "mean_reward": 29.949760990676364,
+        "std_reward": 0.0,
+        "success_rate": 1.0,
+        "mean_length": 30.0,
+        "mean_speed": 29.965648331591517,
+        "mean_crash_step": null
+      }
+    ]
+  },
+  {
+    "name": "DQN PER",
+    "agent_type": "dqn_per",
+    "checkpoint_used": "checkpoints/per_dqn_20260411-191026/20260412-021940_per_dqn_final.pt",
+    "mean_reward": 29.942619457010235,
+    "std_reward": 0.0,
+    "median_reward": 29.942619457010235,
+    "success_rate": 1.0,
+    "mean_length": 30.0,
+    "std_length": 0.0,
+    "mean_speed": 29.965648331591517,
+    "mean_crash_step": null,
+    "seeds": [
+      9
+    ],
+    "num_episodes": 1,
+    "per_seed": [
+      {
+        "seed": 9,
+        "mean_reward": 29.942619457010235,
+        "std_reward": 0.0,
+        "success_rate": 1.0,
+        "mean_length": 30.0,
+        "mean_speed": 29.965648331591517,
+        "mean_crash_step": null
+      }
+    ]
+  },
+  {
+    "name": "DQN Double+PER",
+    "agent_type": "dqn_per",
+    "checkpoint_used": "checkpoints/20260412-071853_double_per_dqn/20260412-071853_double_per_dqn_step170000.pt",
+    "mean_reward": 27.81846221764462,
+    "std_reward": 0.0,
+    "median_reward": 27.81846221764462,
+    "success_rate": 1.0,
+    "mean_length": 30.0,
+    "std_length": 0.0,
+    "mean_speed": 27.9725174702133,
+    "mean_crash_step": null,
+    "seeds": [
+      9
+    ],
+    "num_episodes": 1,
+    "per_seed": [
+      {
+        "seed": 9,
+        "mean_reward": 27.81846221764462,
+        "std_reward": 0.0,
+        "success_rate": 1.0,
+        "mean_length": 30.0,
+        "mean_speed": 27.9725174702133,
+        "mean_crash_step": null
+      }
+    ]
+  }
+]

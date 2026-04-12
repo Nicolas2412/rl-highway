@@ -344,10 +344,11 @@ class DQNAgent(BaseAgent):
         }, path)
         return path
 
-    def load_checkpoint(self, path: str) -> None:
+    def load_checkpoint(self, path: str, show:bool=True) -> None:
         ckpt = torch.load(path, map_location=self.device)
         self.q_net.load_state_dict(ckpt["q_net"])
         self.target_net.load_state_dict(ckpt["target_net"])
         self.optimizer.load_state_dict(ckpt["optimizer"])
         self.global_step = ckpt["global_step"]
-        print(f"Checkpoint chargé depuis {path} (step {self.global_step})")
+        if show:
+            print(f"Checkpoint charge depuis {path} (step {self.global_step})")

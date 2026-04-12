@@ -95,7 +95,9 @@ def test_training(agent_type:str,
     print("Test terminé avec succès.")
 
 if __name__ == "__main__":
-    for agent_type in ["dqn_custom", "dqn_sb3"]:
+    # ["dqn_custom", "dqn_sb3"]
+    agent_types = ["dqn_sb3"]
+    for agent_type in agent_types:
         test_training(agent_type=agent_type,
                     learning_rate=5e-4,
                     gamma=0.99,

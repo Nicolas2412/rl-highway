@@ -1,26 +1,39 @@
 from agents.base_agent import BaseAgent
 from stable_baselines3 import DQN
 from callbacks import HighwayMetricsCallback
-from shared_core_config import DQN_SB3_PARAMS
+from stable_baselines3.common.callbacks import CheckpointCallback
 
 class SB3DQNAgent(BaseAgent):
-    def __init__(self, env=None, model_path=None, tensorboard_log="results/logs/dqn_sb3/", **kwargs):
+    def __init__(self, cfg=None, env=None, model_path=None, tensorboard_log="results/logs/dqn_sb3/", **kwargs):
         """
-        Initialise l'agent SB3.
-        Soit on crée un nouveau modèle depuis l'environnement, 
-        soit on charge un modèle pré-entraîné.
+        Initialise l'agent SB3 en utilisant la même config que les agents custom.
         """
         if model_path is not None:
             self.model = DQN.load(model_path, env=env)
-        elif env is not None:
-            combined_params = {**DQN_SB3_PARAMS, **kwargs}
-            # Remove 'policy' from dict if passing it as a positional arg
-            policy = combined_params.pop("policy", "MlpPolicy")
-            
-            self.model = DQN(policy, env, tensorboard_log=tensorboard_log, **combined_params)
+        elif cfg is not None and env is not None:
+            # Traduction de ta dataclass vers le format SB3
+            sb3_params = {
+                "learning_rate": cfg.learning_rate,
+                "buffer_size":   cfg.buffer_capacity,
+                "learning_starts": cfg.learning_starts,
+                "batch_size":    cfg.batch_size,
+                "tau":           1.0,  # SB3 utilise tau pour les updates soft, 1.0 = hard update
+                "gamma":         cfg.gamma,
+                "train_freq":    cfg.train_frequency,
+                "gradient_steps": 1,
+                "target_update_interval": cfg.target_update_frequency,
+                "exploration_fraction": cfg.epsilon_decay_steps / cfg.total_timesteps,
+                "exploration_initial_eps": cfg.epsilon_start,
+                "exploration_final_eps": cfg.epsilon_end,
+                "policy_kwargs": dict(net_arch=cfg.hidden_dims),
+                "tensorboard_log": tensorboard_log,
+                "verbose": 1,
+            }
+            self.model = DQN("MlpPolicy", env, **sb3_params)
         else:
-            raise ValueError("Il faut fournir soit un 'env' soit un 'model_path'.")
-
+            raise ValueError(
+                "Il faut fournir soit 'model_path', soit 'cfg' ET 'env'.")
+            
     def act(self, obs, epsilon=None):
         """
         Sélectionne une action.
@@ -46,10 +59,15 @@ class SB3DQNAgent(BaseAgent):
         """
         # 30 steps est durée max d'un episode dans la config de test
         total_timesteps = num_episodes * 30
-        
+        checkpoint_callback = CheckpointCallback(
+            save_freq=10000,           # Sauvegarde tous les 10k steps
+            save_path="./logs/checkpoints/",
+            name_prefix="sb3_model_opti"
+        )
         self.model.learn(total_timesteps=total_timesteps, 
                         tb_log_name=run_name or "SB3_Run",
-                        callback= HighwayMetricsCallback(),
+                        callback=[HighwayMetricsCallback(),
+                                checkpoint_callback],
                         reset_num_timesteps=False)
 
     def save(self, path):
@@ -58,4 +76,5 @@ class SB3DQNAgent(BaseAgent):
 
     def load(self, path):
         """Charge l'archive .zip du modèle."""
-        self.model = DQN.load(path)
+        current_env = getattr(self.model, "env", None) if hasattr(self, "model") else None
+        self.model = DQN.load(path, env=current_env)
