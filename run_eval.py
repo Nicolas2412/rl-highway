@@ -42,28 +42,28 @@ EVAL_REGISTRY = [
         "agent_type": "dqn_custom",
         "checkpoint": "checkpoints/old-runs/20260410-112718_dqn_highway_final_episodic.pt",
     },
-    # {
-    #     "name":       "SB3 DQN",
-    #     "agent_type": "sb3",
-    #     "checkpoint": "checkpoints/sb3_dqn/sb3_final.zip",
-    # },
-    # {
-    #     "name":       "DQN Double",
-    #     "agent_type": "dqn_custom",
-    #     "checkpoint": "checkpoints/dqn_20260411-135652/20260411-154821_dqn_highway_step10000",
-    #     "double_dqn": True,
-    # },
-    # {
-    #     "name":       "DQN PER",
-    #     "agent_type": "dqn_per",
-    #     "checkpoint": "checkpoints/per_dqn_20260411-191026/dqn_20260411-135652",
-    # },
-#     {
-#         "name":       "DQN Double+PER",
-#         "agent_type": "dqn_per",
-#         "checkpoint": "checkpoints/dqn_per_double-incomplete/20260412-071853_per_dqn_step170000.pt",
-#         "double_dqn": True,
-#     },
+    {
+        "name":       "SB3 DQN",
+        "agent_type": "sb3",
+        "checkpoint": "checkpoints/sb3_dqn/sb3_final.zip",
+    },
+    {
+        "name":       "DQN Double",
+        "agent_type": "dqn_custom",
+        "checkpoint": "checkpoints/dqn_20260411-135652/20260412-102004_dqn_highway_step120000",
+        "double_dqn": True,
+    },
+    {
+        "name":       "DQN PER",
+        "agent_type": "dqn_per",
+        "checkpoint": "checkpoints/per_dqn_20260411-191026/20260412-021940_per_dqn_final",
+    },
+    {
+        "name":       "DQN Double+PER",
+        "agent_type": "dqn_per",
+        "checkpoint": "checkpoints/dqn_per_double-incomplete/20260412-071853_per_dqn_step170000.pt",
+        "double_dqn": True,
+    },
 ]
 
 # ---------------------------------------------------------------------------
