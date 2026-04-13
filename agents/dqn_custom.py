@@ -1,11 +1,8 @@
 """
-Classe pour le DQN
-espsilon-decay linéaire
-Inclus une option pour un double DQN
-
+Defines the DQNAgent class implementing a custom DQN
+Linear Epsilon Decay
+Includes a flag to activate double DQN
 """
-
-
 
 import os
 import random
@@ -22,9 +19,7 @@ import gymnasium as gym
 import highway_env  # noqa: F401
 from shared_core_config import SHARED_CORE_CONFIG
 
-
-# ─── Configuration ────────────────────────────────────────────────────────────
-
+# Config class, is also used by the sb3 version
 @dataclass
 class HighwayDQNConfig:
     env_id: str = "highway-v0"
@@ -40,47 +35,12 @@ class HighwayDQNConfig:
     target_update_frequency: int = 50
     epsilon_start: float = 1.0
     epsilon_end: float = 0.01
-    epsilon_decay_steps: int = 150000
+    epsilon_decay_steps: int = 150_000
     double_dqn: bool = False
     checkpoint_dir: str = "../rl-highway/checkpoints"
     checkpoint_frequency: int = 10_000
-    
-    def __init__(self,env_id = "highway-v0",
-                    seed = 42,
-                    hidden_dims = [256, 256],
-                    total_timesteps = 200_000,
-                    learning_rate = 0.0001432249371823026,
-                    gamma = 0.8296389588638785,
-                    batch_size = 64,
-                    buffer_capacity = 30000,
-                    learning_starts = 200,
-                    train_frequency = 1,
-                    target_update_frequency = 50,
-                    epsilon_start = 1.0,
-                    epsilon_end = 0.01,
-                    epsilon_decay_steps = 100_000,
-                    double_dqn = False,
-                    checkpoint_dir = "../rl-highway/checkpoints",
-                    checkpoint_frequency = 10_000):
-        self.env_id = env_id
-        self.seed = seed
-        self.hidden_dims = hidden_dims
-        self.total_timesteps = total_timesteps
-        self.learning_rate = learning_rate
-        self.gamma = gamma
-        self.batch_size = batch_size
-        self.buffer_capacity = buffer_capacity
-        self.learning_starts = learning_starts
-        self.train_frequency = train_frequency
-        self.target_update_frequency = target_update_frequency
-        self.epsilon_start = epsilon_start
-        self.epsilon_end = epsilon_end
-        self.epsilon_decay_steps = epsilon_decay_steps
-        self.double_dqn = double_dqn
 
-
-# ─── Q-Network ────────────────────────────────────────────────────────────────
-
+# Q Network class
 class HighwayQNetwork(nn.Module):
     def __init__(self, obs_shape, n_actions, hidden_dims):
         super().__init__()
@@ -93,12 +53,11 @@ class HighwayQNetwork(nn.Module):
         self.net = nn.Sequential(*layers)
 
     def forward(self, x):
-        # Aplatit toutes les dimensions sauf le batch
+        # Flattens every dimension except the batch
         return self.net(x.flatten(start_dim=1) if x.dim() > 1 else x.flatten())
 
 
-# ─── Replay Buffer ────────────────────────────────────────────────────────────
-
+# Replay Buffer
 class ReplayBuffer:
     def __init__(self, capacity):
         self.buffer = deque(maxlen=capacity)
@@ -109,7 +68,7 @@ class ReplayBuffer:
             int(a),
             float(r),
             np.array(s_, dtype=np.float32),
-            float(terminated),   # terminated uniquement, pas done (pour le bootstrap)
+            float(terminated),   # terminated only, not done (for bootstrap)
         ))
 
     def sample(self, batch_size):
@@ -127,8 +86,7 @@ class ReplayBuffer:
         return len(self.buffer)
 
 
-# ─── Agent ────────────────────────────────────────────────────────────────────
-
+# Agent
 class DQNAgent(BaseAgent):
     def __init__(self, cfg: HighwayDQNConfig, obs_shape, n_actions):
         self.cfg = cfg
@@ -146,20 +104,20 @@ class DQNAgent(BaseAgent):
 
         os.makedirs(cfg.checkpoint_dir, exist_ok=True)
 
-    # ── BaseAgent interface ───────────────────────────────────────────────────
+    # BaseAgent interface
 
     def act(self, obs, epsilon=None) -> int:
-        """Sélection gloutonne (évaluation). epsilon est ignoré."""
+        """Greedy selection (for evaluation), ignoring epsilon"""
         return self._greedy(obs)
 
     def update(self, obs=None, action=None, reward=None,
-               terminated=None, next_obs=None) -> Optional[float]:
+            terminated=None, next_obs=None) -> Optional[float]:
         """
-        Tire un mini-batch du buffer et effectue une mise à jour du réseau.
-        Les arguments positionnels sont conservés pour respecter la signature
-        de BaseAgent ; le push dans le buffer est fait en amont par la boucle
-        d'entraînement (train_highway_dqn / train_vectorized / train).
-        Retourne la loss ou None si le buffer est trop petit.
+        Samples a mini-batch from the buffer and performs a network update.
+        Positional arguments are retained to match the BaseAgent signature; 
+        pushing to the buffer is handled upstream by the training loop 
+        (train_highway_dqn / train_vectorized / train).
+        Returns the loss, or None if the buffer is too small.
         """
         if len(self.buffer) < self.cfg.batch_size:
             return None
@@ -193,30 +151,29 @@ class DQNAgent(BaseAgent):
             log_dir: Optional[str] = None,
             run_name: Optional[str] = None) -> None:
         """
-        Boucle d'entraînement épisodique (interface BaseAgent).
-        Utilisée par evaluate_over_seeds ; fonctionne sur un env simple
-        (non-vectorisé), contrairement à train_vectorized.
+        Episodic training loop (BaseAgent interface).
+        Used by evaluate_over_seeds; operates on a single (non-vectorized) env, 
+        unlike train_vectorized.
 
-        Les hyperparamètres (lr, gamma, epsilon…) sont lus depuis self.cfg.
-        TensorBoard : écrit dans log_dir/run_name si fournis.
+        Hyperparameters (lr, gamma, epsilon...) are read from self.cfg.
+        TensorBoard: logs to log_dir/run_name if provided.
         """
 
-
-        # ── Reproductibilité ─────────────────────────────────────────────────
+        # Reproductibility
         _seed = seed if seed is not None else self.cfg.seed
         random.seed(_seed)
         np.random.seed(_seed)
         torch.manual_seed(_seed)
 
-        # ── TensorBoard ──────────────────────────────────────────────────────
+        # TensorBoard
         writer = None
         if log_dir is not None:
             from torch.utils.tensorboard import SummaryWriter
             writer = SummaryWriter(log_dir=log_dir)
 
-        # ── Configuration de l'environnement ─────────────────────────────────
-        # L'env est passé par evaluate_over_seeds ; on le configure ici si
-        # l'unwrapped expose configure() (highway-env).
+        # Environment configuration
+        # The env is given via evaluate_over_seeds ; we configure it here if
+        # it exposes configure().
         if hasattr(env.unwrapped, "configure"):
             env.unwrapped.configure(SHARED_CORE_CONFIG)
 
@@ -255,7 +212,7 @@ class DQNAgent(BaseAgent):
             step += 1
             self.global_step = step
             
-            # Mise à jour réseau
+            # Update Network
             if step >= self.cfg.learning_starts and step % self.cfg.train_frequency == 0:
                 loss = self.update()
                 if loss is not None:
@@ -263,19 +220,19 @@ class DQNAgent(BaseAgent):
                     if writer is not None:
                         writer.add_scalar("train/loss", loss, step)
             
-            # Sync réseau cible
-                if step % self.cfg.target_update_frequency == 0:
-                    self.sync_target_network()
+            # Synchronyze target network
+            if step % self.cfg.target_update_frequency == 0:
+                self.sync_target_network()
 
-                # Checkpoint périodique
-                if self.cfg.checkpoint_frequency > 0 and step % self.cfg.checkpoint_frequency == 0:
-                    self.save_checkpoint(tag=f"step{step}")
+            # Checkpoint save
+            if self.cfg.checkpoint_frequency > 0 and step % self.cfg.checkpoint_frequency == 0:
+                self.save_checkpoint(tag=f"step{step}")
                     
             if done or truncated:
                 
                 episode_rewards.append(ep_reward)
 
-                # Logging TensorBoard par épisode
+                # Logging TensorBoard by episode
                 episode_count += 1
                 if info.get("crashed", False):
                     collision_count += 1
@@ -299,21 +256,21 @@ class DQNAgent(BaseAgent):
                         writer.add_scalar(f"env/reward_{key}", np.mean(vals), step)
                     writer.flush()
                 
-                # Reset pour l'épisode suivant
+                # Reset for next episode
                 obs, _ = env.reset()
                 ep_reward = 0.0
                 ep_len = 0
                 ep_speeds = []
                 ep_sub_rewards = {}
                         
-        # ── Fin d'entraînement ───────────────────────────────────────────────
+        # End of training
         self.save_checkpoint(tag="final_episodic")
         if writer is not None:
             writer.flush()
             writer.close()
 
     def save(self, path: str) -> None:
-        """Interface BaseAgent → délègue à save_checkpoint avec le path fourni."""
+        """Interface BaseAgent -> delegates to save_checkpoint with the given path."""
         torch.save({
             "q_net":       self.q_net.state_dict(),
             "target_net":  self.target_net.state_dict(),
@@ -322,23 +279,23 @@ class DQNAgent(BaseAgent):
         }, path)
 
     def load(self, path: str) -> None:
-        """Interface BaseAgent → délègue à load_checkpoint."""
+        """Interface BaseAgent -> delegates to load_checkpoint."""
         self.load_checkpoint(path)
 
-    # ── Méthodes internes ─────────────────────────────────────────────────────
+    # Internal methods
 
     def get_epsilon(self) -> float:
         frac = min(1.0, self.global_step / self.cfg.epsilon_decay_steps)
         return self.cfg.epsilon_start + frac * (self.cfg.epsilon_end - self.cfg.epsilon_start)
 
     def select_action(self, obs) -> int:
-        """epsilon-greedy (entraînement)."""
+        """epsilon-greedy (training)."""
         if random.random() < self.get_epsilon():
             return random.randint(0, self.n_actions - 1)
         return self._greedy(obs)
 
     def select_actions_batch(self, obs_batch: np.ndarray) -> np.ndarray:
-        """epsilon-greedy vectorisé pour N envs (train_vectorized)."""
+        """epsilon-greedy vectorized for N envs (train_vectorized)."""
         n = len(obs_batch)
         actions = np.array([random.randint(0, self.n_actions - 1) for _ in range(n)])
         greedy_mask = np.random.rand(n) >= self.get_epsilon()
@@ -350,9 +307,9 @@ class DQNAgent(BaseAgent):
         return actions
 
     def _greedy(self, obs) -> int:
-        """Sélection gloutonne sur une seule observation."""
+        """Greedy selection over one observation"""
         obs_t = torch.tensor(obs, dtype=torch.float32, device=self.device)
-        # Assure la présence de la dimension batch quelle que soit la forme d'obs
+        # Ensures that the batch dimension respects obs dimension
         if obs_t.dim() < 2:
             obs_t = obs_t.unsqueeze(0)
         elif obs_t.dim() == 2:
@@ -382,4 +339,4 @@ class DQNAgent(BaseAgent):
         self.optimizer.load_state_dict(ckpt["optimizer"])
         self.global_step = ckpt["global_step"]
         if show:
-            print(f"Checkpoint charge depuis {path} (step {self.global_step})")
+            print(f"Checkpoint loaded from {path} (step {self.global_step})")

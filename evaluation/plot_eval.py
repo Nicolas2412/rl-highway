@@ -1,3 +1,7 @@
+"""
+This script plots evaluation graphs from a saved evaluation_summary.json
+"""
+
 import json
 import os
 

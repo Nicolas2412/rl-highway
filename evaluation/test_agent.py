@@ -1,3 +1,8 @@
+"""
+This script can be used to test the various agents, with rendering or not
+It also can save episodes as .gif gile
+"""
+
 import os
 import sys
 import argparse

@@ -1,3 +1,8 @@
+"""
+This script runs a global evaluation of the desired models
+Results are saved in an evaluation_summary.json file
+"""
+
 import hashlib
 import json
 import os

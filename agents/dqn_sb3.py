@@ -2,6 +2,7 @@ from agents.base_agent import BaseAgent
 from stable_baselines3 import DQN
 from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback
 
+# Custom callback to extract all available informations
 class HighwayMetricsCallback(BaseCallback):
     def __init__(self, verbose=0):
         super().__init__(verbose)
@@ -9,7 +10,6 @@ class HighwayMetricsCallback(BaseCallback):
         self.collision_count = 0
 
     def _on_step(self) -> bool:
-        # On récupère les infos de tous les environnements (SubprocVecEnv)
         for info in self.locals["infos"]:
             if "speed" in info:
                 self.logger.record("env/speed", info["speed"])
@@ -24,27 +24,23 @@ class HighwayMetricsCallback(BaseCallback):
                 if self.locals["infos"][i].get("crashed", False):
                     self.collision_count += 1
 
-                # Log du taux de collision global
                 self.logger.record("env/collision_rate",
                                 self.collision_count / self.episode_count)
         return True
     
 class SB3DQNAgent(BaseAgent):
     def __init__(self, cfg=None, env=None, model_path=None, tensorboard_log="results/logs/dqn_sb3/", **kwargs):
-        """
-        Initialise l'agent SB3 en utilisant la même config que les agents custom.
-        """
         self.cfg = cfg
         if model_path is not None:
             self.model = DQN.load(model_path, env=env)
         elif cfg is not None and env is not None:
-            # Traduction de ta dataclass vers le format SB3
+            #Converting the custom config to the sb3 format
             sb3_params = {
                 "learning_rate": cfg.learning_rate,
                 "buffer_size":   cfg.buffer_capacity,
                 "learning_starts": cfg.learning_starts,
                 "batch_size":    cfg.batch_size,
-                "tau":           1.0,  # SB3 utilise tau pour les updates soft, 1.0 = hard update
+                "tau":           1.0,
                 "gamma":         cfg.gamma,
                 "train_freq":    cfg.train_frequency,
                 "gradient_steps": 1,
@@ -57,26 +53,12 @@ class SB3DQNAgent(BaseAgent):
                 "verbose": 1,
             }
             self.model = DQN("MlpPolicy", env, **sb3_params)
-        else:
-            raise ValueError(
-                "Il faut fournir soit 'model_path', soit 'cfg' ET 'env'.")
             
     def act(self, obs, epsilon=None):
-        """
-        Sélectionne une action.
-        SB3 gère l'exploration en interne pendant l'entraînement.
-        En phase d'utilisation (inférence), on utilise deterministic=True.
-        """
-        # La méthode predict de SB3 renvoie un tuple (action, state)
-        action, _states = self.model.predict(obs, deterministic=True)
+        action, state = self.model.predict(obs, deterministic=True)
         return int(action)
 
     def update(self, obs, action, reward, terminated, next_obs):
-        """
-        No-op pour SB3. 
-        SB3 gère le Replay Buffer et la descente de gradient en interne 
-        pendant l'appel à model.learn().
-        """
         pass
 
     def train(self, env, total_timesteps=10_000, seed=None, log_dir=None, run_name=None):
@@ -97,11 +79,9 @@ class SB3DQNAgent(BaseAgent):
         )
 
     def save(self, path):
-        """Sauvegarde l'archive .zip du modèle."""
         self.model.save(path)
 
     def load(self, path):
-        """Charge l'archive .zip du modèle."""
         current_env = getattr(self.model, "env", None) if hasattr(self, "model") else None
         self.model = DQN.load(path, env=current_env)
 

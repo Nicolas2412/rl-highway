@@ -6,3 +6,5 @@ pygame
 tensorboard
 tqdm
 optuna
+imageio
+seaborn
