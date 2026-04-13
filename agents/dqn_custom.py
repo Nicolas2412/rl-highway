@@ -31,16 +31,16 @@ class HighwayDQNConfig:
     seed: int = 42
     hidden_dims: List[int] = field(default_factory=lambda: [256, 256])
     total_timesteps: int = 200_000
-    learning_rate: float = 5e-4
-    gamma: float = 0.9
-    batch_size: int = 32
-    buffer_capacity: int = 15_000
+    learning_rate: float = 0.0001432249371823026
+    gamma: float = 0.8296389588638785
+    batch_size: int = 64
+    buffer_capacity: int = 30000
     learning_starts: int = 200
     train_frequency: int = 1
     target_update_frequency: int = 50
     epsilon_start: float = 1.0
     epsilon_end: float = 0.01
-    epsilon_decay_steps: int = 100_000
+    epsilon_decay_steps: int = 150000
     double_dqn: bool = False
     checkpoint_dir: str = "../rl-highway/checkpoints"
     checkpoint_frequency: int = 10_000
@@ -59,7 +59,7 @@ class HighwayDQNConfig:
                     epsilon_start = 1.0,
                     epsilon_end = 0.01,
                     epsilon_decay_steps = 100_000,
-                    double_dqn = True,
+                    double_dqn = False,
                     checkpoint_dir = "../rl-highway/checkpoints",
                     checkpoint_frequency = 10_000):
         self.env_id = env_id
