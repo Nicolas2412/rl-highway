@@ -1,8 +1,34 @@
 from agents.base_agent import BaseAgent
 from stable_baselines3 import DQN
-from callbacks import HighwayMetricsCallback
-from stable_baselines3.common.callbacks import CheckpointCallback
+from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback
 
+class HighwayMetricsCallback(BaseCallback):
+    def __init__(self, verbose=0):
+        super().__init__(verbose)
+        self.episode_count = 0
+        self.collision_count = 0
+
+    def _on_step(self) -> bool:
+        # On récupère les infos de tous les environnements (SubprocVecEnv)
+        for info in self.locals["infos"]:
+            if "speed" in info:
+                self.logger.record("env/speed", info["speed"])
+
+            if "rewards" in info:
+                for key, val in info["rewards"].items():
+                    self.logger.record(f"env/reward_{key}", val)
+
+        for i, done in enumerate(self.locals["dones"]):
+            if done:
+                self.episode_count += 1
+                if self.locals["infos"][i].get("crashed", False):
+                    self.collision_count += 1
+
+                # Log du taux de collision global
+                self.logger.record("env/collision_rate",
+                                self.collision_count / self.episode_count)
+        return True
+    
 class SB3DQNAgent(BaseAgent):
     def __init__(self, cfg=None, env=None, model_path=None, tensorboard_log="results/logs/dqn_sb3/", **kwargs):
         """
@@ -78,3 +104,5 @@ class SB3DQNAgent(BaseAgent):
         """Charge l'archive .zip du modèle."""
         current_env = getattr(self.model, "env", None) if hasattr(self, "model") else None
         self.model = DQN.load(path, env=current_env)
+
+

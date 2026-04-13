@@ -43,20 +43,20 @@ EVAL_REGISTRY = [
         "agent_type": "random",
         "checkpoint": None,
     },
-    # {
-    #     "name":       "DQN Custom",
-    #     "agent_type": "dqn_custom",
-    #     "checkpoint": "checkpoints/20260410-112718_dqn_highway/20260410-112718_dqn_highway_final_episodic.pt",
-    # },
+    {
+        "name":       "DQN Custom",
+        "agent_type": "dqn_custom",
+        "checkpoint": "checkpoints/dqn_custom_20260413-082750/model_dqn_custom.pt",
+    },
     {
         "name":       "SB3 DQN",
         "agent_type": "sb3",
-        "checkpoint": "checkpoints/sb3_dqn/sb3_model_opti_60000_steps.zip",
+        "checkpoint": "checkpoints/sb3_dqn/model_dqn_sb3.zip",
     },
     {
         "name":       "DQN Double",
         "agent_type": "dqn_custom",
-        "checkpoint": "checkpoints/dqn_20260411-135652/20260412-102004_dqn_highway_step120000.pt",
+        "checkpoint": "checkpoints/dqn_20260411-135652/20260413-063222_dqn_highway_final.pt",
         "double_dqn": True,
     },
     {
@@ -203,6 +203,11 @@ def evaluate_agent(entry: dict, seed: int, num_episodes: int,
             speeds.append(r["mean_speed"])
         if pbar is not None:
             pbar.update(1)
+            current_mean_r = float(np.mean(rewards))
+            current_success = float(1 - np.mean(crashed))
+            pbar.set_postfix(seed=seed,
+                            R=f"{current_mean_r:.2f}",
+                            ok=f"{current_success*100:.0f}%")
 
     env.close()
     crash_lengths = [l for l, c in zip(lengths, crashed) if c]
@@ -286,9 +291,6 @@ def main() -> None:
                     seed_result = evaluate_agent(entry, seed=seed,
                                                 num_episodes=NUM_EPISODES, pbar=pbar)
                     per_seed.append(seed_result)
-                    pbar.set_postfix(seed=seed,
-                                    R=f"{seed_result['mean_reward']:.2f}",
-                                    ok=f"{seed_result['success_rate']*100:.0f}%")
 
             result = _aggregate(per_seed)
             
@@ -313,19 +315,23 @@ def main() -> None:
                 f"  |  success={result['success_rate']*100:.1f}%")
 
         all_results.append(result)
-        
+
         os.makedirs(os.path.dirname(SUMMARY_PATH), exist_ok=True)
         with open(SUMMARY_PATH, "w", encoding="utf-8") as f:
             json.dump([{k: r.get(k) for k in
                         ["name", "agent_type", "checkpoint_used", "mean_reward", "std_reward",
                         "median_reward", "success_rate", "mean_length", "std_length",
-                         "mean_speed", "mean_crash_step", "seeds", "num_episodes", "per_seed"]}
-                       for r in all_results], f, indent=2)
+                            "mean_speed", "mean_crash_step", "seeds", "num_episodes", "per_seed"]}
+                    for r in all_results], f, indent=2)
             
-
     if not all_results:
         print("Aucun résultat — vérifiez EVAL_REGISTRY.")
         return
+    
+    
+            
+
+
 
     # Résumé console
     col_w = [20, 9, 9, 11, 10, 8, 9]  # Ajout de colonnes pour Speed et Crash

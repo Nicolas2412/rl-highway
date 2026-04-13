@@ -11,7 +11,7 @@ from agents.dqn_sb3 import SB3DQNAgent
 from agents.dqn_custom import DQNAgent, HighwayDQNConfig
 import highway_env  # noqa: F401
 from tqdm import tqdm
-
+import imageio
 
 def make_env():
     def _init():
@@ -42,6 +42,8 @@ def run_episode(
     agent_type: str = "random",
     render: bool = True,
     model_path: str = None,
+    save_gif:bool = False,
+    gif_path:str = "episode.gif"
 ) -> tuple[float, int]:
     """
     Exécute un épisode complet et retourne (total_reward, nb_steps).
@@ -52,8 +54,30 @@ def run_episode(
     render     : active le rendu visuel si True
     model_path : chemin vers le checkpoint (.pt pour dqn_custom, .zip pour sb3)
     """
-    render_mode = "human" if render else None
+    if save_gif:
+        render_mode = "rgb_array"
+    elif render:
+        render_mode = "human"
+    else:
+        render_mode = None
+        
     env = gym.make(SHARED_CORE_ENV_ID, render_mode=render_mode)
+    frames = []
+    
+    if save_gif:
+        SHARED_CORE_CONFIG["screen_width"] = 600
+        SHARED_CORE_CONFIG["screen_height"] = 400
+        SHARED_CORE_CONFIG["scaling"] = 10
+        SHARED_CORE_CONFIG["centering_position"] = [0.3, 0.5]
+        
+        original_auto_render = env.unwrapped._automatic_rendering
+
+        def _capture_intermediate_frames():
+            original_auto_render()
+            frames.append(env.render())
+
+        env.unwrapped._automatic_rendering = _capture_intermediate_frames
+        
     env.unwrapped.configure(SHARED_CORE_CONFIG)
 
     obs, _ = env.reset()
@@ -94,8 +118,14 @@ def run_episode(
         total_reward += reward
         step += 1
 
-        if render:
+        if save_gif:
+            frames.append(env.render())
+        elif render:
             env.render()
+            
+    if save_gif and frames:
+        print(f"\nSauvegarde du GIF en cours vers {gif_path}...")
+        imageio.mimsave(gif_path, frames, fps=15, loop=0)
 
     env.close()
     return total_reward, step
@@ -121,6 +151,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--no-render", action="store_true",
         help="Désactive le rendu visuel.",
+    )
+    parser.add_argument(
+        "--save", action="store_true",
+        help="Active l'enregsitrement d'un gif",
     )
 
     parser.add_argument(
@@ -167,6 +201,7 @@ if __name__ == "__main__":
             agent_type=args.agent,
             render=render,
             model_path=model_path,
+            save_gif=args.save
         )
         rewards.append(reward)
         steps.append(step)
