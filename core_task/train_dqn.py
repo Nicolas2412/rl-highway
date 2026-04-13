@@ -143,8 +143,7 @@ def train_vectorized(
 ):
     run_id = f"dqn_{TIMESTAMP}"
 
-    # FIX 1 : on aligne cfg.checkpoint_dir sur le répertoire dynamique du run,
-    # afin que agent.save_checkpoint() écrive au bon endroit.
+
     cfg.checkpoint_dir = CHECKPOINT_DIR
     cfg.checkpoint_frequency = getattr(cfg, "checkpoint_frequency", 10_000)
     os.makedirs(CHECKPOINT_DIR, exist_ok=True)
@@ -174,21 +173,27 @@ def train_vectorized(
     ep_lengths: list[int] = []
     losses: list[float] = []
 
-    # FIX 2 : resume_from est un chemin absolu ou relatif à CHECKPOINT_DIR.
+
     if resume_from is not None:
-        resume_path = (
-            resume_from
-            if os.path.isabs(resume_from)
-            else os.path.join(CHECKPOINT_DIR, resume_from)
-        )
+        BASE_CHECKPOINT_DIR = os.path.join(WORKING_DIR, "checkpoints")
+
+        if os.path.isabs(resume_from):
+            resume_path = resume_from
+        else:
+            # On cherche dans checkpoints/ directement, pas dans le nouveau run
+            resume_path = os.path.join(BASE_CHECKPOINT_DIR, resume_from)
+
         agent.load_checkpoint(resume_path)
         start_step = agent.global_step
+
+        # Charger les métriques depuis le dossier SOURCE du checkpoint
+        source_dir = os.path.dirname(resume_path)
         for fname, target in [
             ("episode_rewards.npy", episode_rewards),
             ("ep_lengths.npy",      ep_lengths),
             ("losses.npy",          losses),
         ]:
-            path = os.path.join(CHECKPOINT_DIR, fname)
+            path = os.path.join(source_dir, fname)
             try:
                 target.extend(np.load(path).tolist())
             except FileNotFoundError:
@@ -301,4 +306,6 @@ def train_vectorized(
 
 if __name__ == "__main__":
     cfg = HighwayDQNConfig()
-    train_vectorized(cfg, num_envs=2)
+    train_vectorized(cfg, num_envs=1, resume_from="checkpoints/dqn_20260413-010253")
+
+   
