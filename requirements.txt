@@ -5,3 +5,4 @@ shimmy>=2.0
 pygame
 tensorboard
 tqdm
+optuna

@@ -2,8 +2,8 @@
 Visualisation des résultats de la recherche d'hyperparamètres.
 
 Usage :
-    python hparam_viz.py --study-db hparam_results/optuna_study.db
-    python hparam_viz.py --study-db hparam_results/optuna_study.db --save
+    python hparam_viz.py --study-db core_task/hparam_results/optuna_study.db
+    python hparam_viz.py --study-db core_task/hparam_results/optuna_study.db --save
 """
 
 import argparse
@@ -16,7 +16,7 @@ import optuna
 
 
 STUDY_NAME  = "highway_dqn"
-RESULTS_DIR = "hparam_results"
+RESULTS_DIR = "core_task/hparam_results"
 
 # Noms de paramètres tels qu'enregistrés par l'objectif dans hparam_search.py
 CONTINUOUS_PARAMS  = ["lr", "gamma", "eps_decay", "target_upd"]
