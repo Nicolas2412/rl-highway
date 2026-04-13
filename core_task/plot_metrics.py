@@ -9,13 +9,40 @@ from shared_core_config import (
     SHARED_CORE_ENV_ID, 
     SHARED_CORE_CONFIG, 
     SHARED_SEED, 
-    DQN_CUSTOM_PARAMS, 
-    DQN_SB3_PARAMS
 )
 from evaluate import evaluate_over_seeds
 from agents.random_agent import RandomAgent
 from agents.dqn_custom import DQNAgent 
 from agents.dqn_sb3 import SB3DQNAgent
+
+DQN_CUSTOM_PARAMS = {
+    "gamma": 0.95,
+    "batch_size": 32,
+    "buffer_capacity": 15000,
+    "update_target_every": 50,
+    "epsilon_start": 1.0,
+    "decrease_epsilon_factor": 200,
+    "epsilon_min": 0.05,
+    "learning_rate": 5e-4,
+    "hidden_size": 256,
+}
+
+DQN_SB3_PARAMS = {
+    "policy": "MlpPolicy",
+    "learning_rate": 5e-4,
+    "buffer_size": 15000,
+    "learning_starts": 200,
+    "batch_size": 32,
+    "tau": 1.0,
+    "gamma": 0.95,
+    "train_freq": 1,
+    "gradient_steps": 1,
+    "target_update_interval": 50,
+    "exploration_fraction": 0.2,
+    "exploration_final_eps": 0.05,
+}
+
+SHARED_SEED = 42
 
 SEEDS = [SHARED_SEED, 123, 777] 
 

@@ -1,217 +1,181 @@
+from shared_core_config import SHARED_CORE_CONFIG, SHARED_CORE_ENV_ID
+from agents.random_agent import RandomAgent
+from agents.dqn_sb3 import SB3DQNAgent
+from agents.dqn_per import PERDQNAgent, HighwayPERConfig
+from agents.dqn_custom import DQNAgent, HighwayDQNConfig
+from tqdm import tqdm
+import numpy as np
+import imageio
+import gymnasium as gym
+import os
+import argparse
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="pygame")
 
-import argparse
-import os
-import numpy as np
-import gymnasium as gym
-from shared_core_config import SHARED_CORE_ENV_ID, SHARED_CORE_CONFIG
-from agents.random_agent import RandomAgent
-from agents.dqn_sb3 import SB3DQNAgent
-from agents.dqn_custom import DQNAgent, HighwayDQNConfig
+
 import highway_env  # noqa: F401
-from tqdm import tqdm
-import imageio
-
-def make_env():
-    def _init():
-        env = gym.make(SHARED_CORE_ENV_ID, render_mode=None)
-        env.unwrapped.configure(SHARED_CORE_CONFIG)
-        env.reset()
-        return env
-    return _init
 
 
-def _build_dqn_agent(env: gym.Env, model_path: str) -> DQNAgent:
-    """
-    Instancie un DQNAgent depuis un checkpoint .pt.
+AGENT_REGISTRY = {
+    "random": {
+        "agent_type": "random",
+        "checkpoint": None,
+    },
+    "dqn_custom": {
+        "agent_type": "dqn_custom",
+        "checkpoint": "checkpoints/dqn_custom_20260413-082750/model_dqn_custom.pt",
+    },
+    "sb3": {
+        "agent_type": "sb3",
+        "checkpoint": "checkpoints/sb3_dqn/model_dqn_sb3.zip",
+    },
+    "dqn_double": {
+        "agent_type": "dqn_custom",
+        "checkpoint": "checkpoints/dqn_20260411-135652/20260413-063222_dqn_highway_final.pt",
+        "double_dqn": True,
+    },
+    "dqn_per": {
+        "agent_type": "dqn_per",
+        "checkpoint": "checkpoints/per_dqn_20260411-191026/20260412-021940_per_dqn_final.pt",
+    },
+    "dqn_double_per": {
+        "agent_type": "dqn_per",
+        "checkpoint": "checkpoints/20260412-084516_per_double_dqn/20260412-084516_per_double_dqn_final.pt",
+        "double_dqn": True,
+    },
+}
 
-    DQNAgent attend (cfg, obs_shape, n_actions) — on ne peut pas passer
-    directement les espaces gymnasium. On reconstruit un HighwayDQNConfig
-    minimal ; les poids sont chargés via load_checkpoint().
-    """
-    obs_shape = env.observation_space.shape
-    n_actions = env.action_space.n
-    cfg = HighwayDQNConfig()
-    agent = DQNAgent(cfg, obs_shape, n_actions)
-    agent.load_checkpoint(model_path)
-    return agent
+
+def _load_agent(entry: dict, env: gym.Env):
+    agent_type = entry["agent_type"]
+    checkpoint = entry.get("checkpoint")
+
+    if agent_type == "random":
+        return RandomAgent(action_space=env.action_space,
+                           observation_space=env.observation_space,
+                           epsilon=None)
+
+    if agent_type == "dqn_custom":
+        cfg = HighwayDQNConfig(double_dqn=entry.get("double_dqn", False))
+        agent = DQNAgent(cfg, env.observation_space.shape, env.action_space.n)
+        if checkpoint:
+            agent.load_checkpoint(checkpoint)
+        return agent
+
+    if agent_type == "dqn_per":
+        cfg = HighwayPERConfig(double_dqn=entry.get("double_dqn", False))
+        agent = PERDQNAgent(
+            cfg, env.observation_space.shape, env.action_space.n)
+        if checkpoint:
+            agent.load_checkpoint(checkpoint)
+        return agent
+
+    if agent_type == "sb3":
+        return SB3DQNAgent(model_path=checkpoint, env=env, determistic=True)
+
+    raise ValueError(f"Unknown agent_type: {agent_type}")
 
 
 def run_episode(
-    agent_type: str = "random",
+    agent_name: str,
     render: bool = True,
-    model_path: str = None,
-    save_gif:bool = False,
-    gif_path:str = "episode.gif"
+    checkpoint: str = None,
+    save_gif: bool = False,
+    gif_path: str = "episode.gif",
 ) -> tuple[float, int]:
-    """
-    Exécute un épisode complet et retourne (total_reward, nb_steps).
+    entry = dict(AGENT_REGISTRY[agent_name])
+    if checkpoint:
+        entry["checkpoint"] = checkpoint
 
-    Parameters
-    ----------
-    agent_type : "random" | "dqn_custom" | "sb3"
-    render     : active le rendu visuel si True
-    model_path : chemin vers le checkpoint (.pt pour dqn_custom, .zip pour sb3)
-    """
-    if save_gif:
-        render_mode = "rgb_array"
-    elif render:
-        render_mode = "human"
-    else:
-        render_mode = None
-        
+    render_mode = "rgb_array" if save_gif else ("human" if render else None)
     env = gym.make(SHARED_CORE_ENV_ID, render_mode=render_mode)
     frames = []
-    
+
     if save_gif:
-        SHARED_CORE_CONFIG["screen_width"] = 600
-        SHARED_CORE_CONFIG["screen_height"] = 400
-        SHARED_CORE_CONFIG["scaling"] = 10
-        SHARED_CORE_CONFIG["centering_position"] = [0.3, 0.5]
-        
+        cfg = dict(SHARED_CORE_CONFIG)
+        cfg.update({"screen_width": 600, "screen_height": 400,
+                    "scaling": 10, "centering_position": [0.3, 0.5]})
+
         original_auto_render = env.unwrapped._automatic_rendering
 
-        def _capture_intermediate_frames():
+        def _capture():
             original_auto_render()
             frames.append(env.render())
 
-        env.unwrapped._automatic_rendering = _capture_intermediate_frames
-        
-    env.unwrapped.configure(SHARED_CORE_CONFIG)
+        env.unwrapped._automatic_rendering = _capture
+        env.unwrapped.configure(cfg)
+    else:
+        env.unwrapped.configure(SHARED_CORE_CONFIG)
 
     obs, _ = env.reset()
+    agent = _load_agent(entry, env)
 
-    if agent_type == "random":
-        agent = RandomAgent(action_space=env.action_space,observation_space= env.observation_space,epsilon=None)
-
-    elif agent_type == "dqn_custom":
-
-        if model_path is None:
-            raise ValueError(
-                "dqn_custom requiert --model-path pointant vers un fichier .pt"
-            )
-        agent = _build_dqn_agent(env, model_path)
-
-    elif agent_type == "sb3":
-        if model_path is None:
-            raise ValueError(
-                "sb3 requiert --model-path pointant vers un fichier .zip"
-            )
-        agent = SB3DQNAgent(
-            model_path=model_path,
-            action_space=env.action_space,
-            determistic=True,
-        )
-
-    else:
-        raise ValueError(f"Agent inconnu : {agent_type}")
-
-    done = False
-    truncated = False
+    done = truncated = False
     total_reward = 0.0
-    step = 0
+    steps = 0
 
     while not (done or truncated):
-        action = agent.act(obs)
+        action = agent.act(obs, epsilon=0.0)
         obs, reward, done, truncated, _ = env.step(action)
         total_reward += reward
-        step += 1
-
+        steps += 1
         if save_gif:
             frames.append(env.render())
-        elif render:
-            env.render()
-            
+
     if save_gif and frames:
-        print(f"\nSauvegarde du GIF en cours vers {gif_path}...")
-        imageio.mimsave(gif_path, frames, fps=15, loop=0)
+        print(f"\nSaving GIF to {gif_path} ...")
+        imageio.mimsave(gif_path, frames, fps=20, loop=0)
 
     env.close()
-    return total_reward, step
+    return total_reward, steps
 
-
-# ---------------------------------------------------------------------------
-# Point d'entrée
-# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Évaluation des agents sur Highway-env"
-    )
-    parser.add_argument(
-        "--agent", type=str, default="random",
-        choices=["random", "sb3", "dqn_custom"],
-        help="Type d'agent à évaluer.",
-    )
-    parser.add_argument(
-        "--episodes", type=int, default=1,
-        help="Nombre d'épisodes d'évaluation.",
-    )
-    parser.add_argument(
-        "--no-render", action="store_true",
-        help="Désactive le rendu visuel.",
-    )
-    parser.add_argument(
-        "--save", action="store_true",
-        help="Active l'enregsitrement d'un gif",
-    )
-
-    parser.add_argument(
-        "--model-path", type=str, default=None,
-        help=(
-            "Chemin vers le checkpoint. "
-            "Défaut : checkpoints/models/test.pt  (dqn_custom) "
-            "ou      checkpoints/models/test.zip  (sb3)."
-        ),
-    )
-
+        description="Run a single agent on Highway-env")
+    parser.add_argument("--agent", type=str, default="random",
+                        choices=list(AGENT_REGISTRY.keys()),
+                        help="Agent to evaluate.")
+    parser.add_argument("--episodes", type=int, default=1,
+                        help="Number of episodes.")
+    parser.add_argument("--no-render", action="store_true",
+                        help="Disable visual rendering.")
+    parser.add_argument("--save", action="store_true",
+                        help="Save episode as a GIF.")
+    parser.add_argument("--model-path", type=str, default=None,
+                        help="Override the default checkpoint path for this agent.")
     args = parser.parse_args()
+
     render = not args.no_render
+    checkpoint = args.model_path or AGENT_REGISTRY[args.agent].get(
+        "checkpoint")
 
-
-    if args.model_path is not None:
-        model_path = args.model_path
-    elif args.agent == "dqn_custom":
-        model_path = "results/models/test.pt"
-    elif args.agent == "sb3":
-        model_path = "results/models/test.zip"
-    else:
-        model_path = None   # random : aucun fichier requis
-
-   
     if args.agent != "random":
-        if model_path is None or not os.path.exists(model_path):
-            print(f"Modèle non trouvé : {model_path}")
-            print("Fournissez --model-path ou lancez d'abord l'entraînement.")
+        if not checkpoint or not os.path.exists(checkpoint):
+            print(f"Checkpoint not found: {checkpoint}")
             exit(1)
 
     print(f"Agent      : {args.agent}")
-    print(f"Épisodes   : {args.episodes}")
-    print(f"Rendu      : {'oui' if render else 'non'}")
-    if model_path:
-        print(f"Checkpoint : {model_path}")
+    print(f"Episodes   : {args.episodes}")
+    print(f"Render     : {render}")
+    if checkpoint:
+        print(f"Checkpoint : {checkpoint}")
 
-    rewards = []
-    steps = []
-
-    pbar = tqdm(range(args.episodes), desc="Évaluation", unit="épisode")
+    rewards, steps_list = [], []
+    pbar = tqdm(range(args.episodes), desc="Evaluation", unit="ep")
     for _ in pbar:
-        reward, step = run_episode(
-            agent_type=args.agent,
+        r, s = run_episode(
+            agent_name=args.agent,
             render=render,
-            model_path=model_path,
-            save_gif=args.save
+            checkpoint=args.model_path,
+            save_gif=args.save,
         )
-        rewards.append(reward)
-        steps.append(step)
-        pbar.set_postfix({
-            "Last_Rew": f"{reward:.2f}",
-            "Steps":    step,
-            "Avg_Rew":  f"{np.mean(rewards):.2f}",
-        })
+        rewards.append(r)
+        steps_list.append(s)
+        pbar.set_postfix(last=f"{r:.2f}", steps=s,
+                         avg=f"{np.mean(rewards):.2f}")
 
-    if args.episodes > 0:
-        print("\n--- Statistiques Globales ---")
-        print(f"Récompense moyenne : {np.mean(rewards):.2f} ± {np.std(rewards):.2f}")
-        print(f"Durée moyenne      : {np.mean(steps):.1f} étapes")
+    if rewards:
+        print(
+            f"\nMean reward : {np.mean(rewards):.2f} ± {np.std(rewards):.2f}")
+        print(f"Mean steps  : {np.mean(steps_list):.1f}")
