@@ -34,6 +34,7 @@ class SB3DQNAgent(BaseAgent):
         """
         Initialise l'agent SB3 en utilisant la même config que les agents custom.
         """
+        self.cfg = cfg
         if model_path is not None:
             self.model = DQN.load(model_path, env=env)
         elif cfg is not None and env is not None:
@@ -78,23 +79,22 @@ class SB3DQNAgent(BaseAgent):
         """
         pass
 
-    def train(self, env, num_episodes=500, seed=None, log_dir=None, run_name=None):
-        """
-        Lance l'entraînement.
-        Attention: SB3 compte en 'timesteps' et non en épisodes.
-        """
-        # 30 steps est durée max d'un episode dans la config de test
-        total_timesteps = num_episodes * 30
+    def train(self, env, total_timesteps=10_000, seed=None, log_dir=None, run_name=None):
+        
+        save_path = self.cfg.checkpoint_dir if self.cfg else "./logs/checkpoints/"
+        
         checkpoint_callback = CheckpointCallback(
-            save_freq=10000,           # Sauvegarde tous les 10k steps
-            save_path="./logs/checkpoints/",
-            name_prefix="sb3_model_opti"
+            save_freq=10000,
+            save_path=save_path,
+            name_prefix="sb3_ckpt"
         )
-        self.model.learn(total_timesteps=total_timesteps, 
-                        tb_log_name=run_name or "SB3_Run",
-                        callback=[HighwayMetricsCallback(),
-                                checkpoint_callback],
-                        reset_num_timesteps=False)
+        
+        self.model.learn(
+            total_timesteps=total_timesteps,
+            tb_log_name=run_name or "SB3_Run",
+            callback=[HighwayMetricsCallback(), checkpoint_callback],
+            reset_num_timesteps=False
+        )
 
     def save(self, path):
         """Sauvegarde l'archive .zip du modèle."""

@@ -10,9 +10,9 @@ if ROOT_DIR not in sys.path:
     sys.path.append(ROOT_DIR)
 
 
-from agents.dqn_sb3 import SB3DQNAgent 
-from agents.dqn_custom import DQNAgent, HighwayDQNConfig
+from agents.dqn_sb3 import SB3DQNAgent
 from shared_core_config import SHARED_CORE_ENV_ID, SHARED_CORE_CONFIG
+from agents.dqn_custom import DQNAgent, HighwayDQNConfig
 
 # CONFIGURATION ISSUE D'OPTUNA
 BEST_HPARAMS = {
@@ -27,15 +27,20 @@ BEST_HPARAMS = {
     "double_dqn": False
 }
 
+REGISTRY_PATH = os.path.join(ROOT_DIR, "checkpoints", "runs_registry.jsonl")
 
-def register_run(agent_type, cfg, status="done", save_path=""):
-    registry_path = os.path.join(ROOT_DIR, "checkpoints/runs_registry.jsonl")
+
+def register_run_start(run_id, agent_type, cfg, run_dir):
+    """Enregistre le début du run avec le statut 'running'"""
+    os.makedirs(os.path.dirname(REGISTRY_PATH), exist_ok=True)
 
     run_entry = {
-        "run_id": f"{agent_type}_{time.strftime('%Y%m%d-%H%M%S')}",
+        "run_id": run_id,
         "algorithm": agent_type,
-        "status": status,
+        "status": "running",
         "started_at": time.strftime("%Y%m%d-%H%M%S"),
+        "ended_at": None,
+        "checkpoint_dir": run_dir,
         "hyperparameters": {
             "lr": cfg.learning_rate,
             "gamma": cfg.gamma,
@@ -46,20 +51,53 @@ def register_run(agent_type, cfg, status="done", save_path=""):
             "hidden_dims": cfg.hidden_dims,
             "double_dqn": cfg.double_dqn
         },
-        "final_checkpoint": save_path
+        "final_checkpoint": None
     }
 
-    with open(registry_path, "a", encoding="utf-8") as f:
+    with open(REGISTRY_PATH, "a", encoding="utf-8") as f:
         f.write(json.dumps(run_entry) + "\n")
-    print(f"Run enregistré dans le registre : {registry_path}")
+        
 
-def run_benchmark(agent_type: str, num_episodes: int = 1000):
-    print(f"\n--- DÉMARRAGE ENTRAÎNEMENT : {agent_type} ---")
+def register_run_end(run_id, final_checkpoint_path):
+    """Met à jour le registre pour passer le run en 'done'"""
+    if not os.path.exists(REGISTRY_PATH):
+        return
+
+    with open(REGISTRY_PATH, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    updated_lines = []
+    for line in lines:
+        entry = json.loads(line)
+        if entry["run_id"] == run_id:
+            entry["status"] = "done"
+            entry["ended_at"] = time.strftime("%Y%m%d-%H%M%S")
+            entry["final_checkpoint"] = final_checkpoint_path
+        updated_lines.append(json.dumps(entry) + "\n")
+
+    with open(REGISTRY_PATH, "w", encoding="utf-8") as f:
+        f.writelines(updated_lines)
+    print(f"Registre mis à jour (Run terminé) : {REGISTRY_PATH}")
+    
+    
+def run_benchmark(agent_type: str, total_timesteps: int = 10_000):
+
+    # Creation of a unique run ID based on agent type and timestamp
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    run_id = f"{agent_type}_{timestamp}"
+
+    run_dir = os.path.join(ROOT_DIR, "checkpoints", run_id)
+    log_dir = os.path.join(run_dir, "logs")  # TensorBoard logs
+    os.makedirs(log_dir, exist_ok=True)
+
+    print(f"\n--- DÉMARRAGE ENTRAÎNEMENT : {run_id} ---")
+    print(f"Dossier du run : {run_dir}")
 
     env = gym.make(SHARED_CORE_ENV_ID)
     env.unwrapped.configure(SHARED_CORE_CONFIG)
     env.reset()
 
+    # Configuration
     cfg = HighwayDQNConfig(
         learning_rate=BEST_HPARAMS["lr"],
         gamma=BEST_HPARAMS["gamma"],
@@ -69,32 +107,33 @@ def run_benchmark(agent_type: str, num_episodes: int = 1000):
         target_update_frequency=BEST_HPARAMS["target_upd"],
         hidden_dims=[BEST_HPARAMS["hidden_size"]] * BEST_HPARAMS["n_layers"],
         double_dqn=BEST_HPARAMS["double_dqn"],
-        total_timesteps=num_episodes * 30  # Estimation pour SB3
+        total_timesteps=total_timesteps,
+        checkpoint_dir=run_dir
     )
 
+    register_run_start(run_id, agent_type, cfg, run_dir)
+    
     if agent_type == "dqn_custom":
         agent = DQNAgent(cfg, env.observation_space.shape, env.action_space.n)
         ext = "pt"
     elif agent_type == "dqn_sb3":
-        agent = SB3DQNAgent(cfg=cfg, env=env)
+        agent = SB3DQNAgent(cfg=cfg, env=env, tensorboard_log=log_dir)
         ext = "zip"
     else:
         raise ValueError("Type d'agent inconnu")
-    run_name = f"bench_{agent_type}"
     
-    log_dir = os.path.join("results/logs", agent_type)
-    os.makedirs(log_dir, exist_ok=True)
-    agent.train(env, num_episodes=num_episodes, run_name=run_name, log_dir=log_dir)
-    print(f"Logging to {log_dir}")
+    agent.train(env, total_timesteps=total_timesteps,
+                run_name=run_id, log_dir=log_dir)
+
+    final_model_path = os.path.join(run_dir, f"final_model.{ext}")
+    agent.save(final_model_path)
+    print(f"Modèle {agent_type} final sauvegardé dans : {final_model_path}")
     
-    os.makedirs("results/benchmarks", exist_ok=True)
-    save_path = f"results/benchmarks/model_{agent_type}.{ext}"
-    agent.save(save_path)
-    print(f"Modèle {agent_type} sauvegardé dans: {save_path}")
-    register_run(agent_type, cfg, status="done", save_path=save_path)
+    register_run_end(run_id, final_model_path)
     env.close()
 
-
 if __name__ == "__main__":
-    for algorithm in ["dqn_sb3"]:
-        run_benchmark(agent_type=algorithm, num_episodes=6666)
+    # "dqn_sb3", "dqn_custom"
+    agents_type = ["dqn_custom", "dqn_sb3"]
+    for algorithm in agents_type:
+        run_benchmark(agent_type=algorithm, total_timesteps=1000)

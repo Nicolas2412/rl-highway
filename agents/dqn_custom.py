@@ -188,10 +188,10 @@ class DQNAgent(BaseAgent):
         self.optimizer.step()
         return loss.item()
 
-    def train(self, env, num_episodes: int = 500,
-              seed: Optional[int] = None,
-              log_dir: Optional[str] = None,
-              run_name: Optional[str] = None) -> None:
+    def train(self, env, total_timesteps: int = 10_000,
+            seed: Optional[int] = None,
+            log_dir: Optional[str] = None,
+            run_name: Optional[str] = None) -> None:
         """
         Boucle d'entraînement épisodique (interface BaseAgent).
         Utilisée par evaluate_over_seeds ; fonctionne sur un env simple
@@ -212,8 +212,7 @@ class DQNAgent(BaseAgent):
         writer = None
         if log_dir is not None:
             from torch.utils.tensorboard import SummaryWriter
-            _run_name = run_name or f"dqn_ep_{time.strftime('%Y%m%d-%H%M%S')}"
-            writer = SummaryWriter(log_dir=os.path.join(log_dir, _run_name))
+            writer = SummaryWriter(log_dir=log_dir)
 
         # ── Configuration de l'environnement ─────────────────────────────────
         # L'env est passé par evaluate_over_seeds ; on le configure ici si
@@ -222,61 +221,93 @@ class DQNAgent(BaseAgent):
             env.unwrapped.configure(SHARED_CORE_CONFIG)
 
         obs, _ = env.reset(seed=_seed)
-
-        # Compteurs globaux
         step = self.global_step
-        episode_rewards: list[float] = []
-        losses: list[float] = []
-
-        for ep in range(num_episodes):
-            obs, _ = env.reset(seed=None if ep > 0 else _seed)
-            ep_reward = 0.0
-            ep_len    = 0
-            done = truncated = False
-
-            while not (done or truncated):
-                # epsilon-greedy
-                action = self.select_action(obs)
-                next_obs, reward, done, truncated, _ = env.step(action)
-
-                # Push dans le buffer (terminated uniquement, pas done)
-                self.buffer.push(obs, action, reward, next_obs, float(done))
-                obs = next_obs
-                ep_reward += reward
-                ep_len    += 1
-                step      += 1
-                self.global_step = step
-
-                # Mise à jour réseau
-                if step >= self.cfg.learning_starts and step % self.cfg.train_frequency == 0:
-                    loss = self.update()
-                    if loss is not None:
-                        losses.append(loss)
-                        if writer is not None:
-                            writer.add_scalar("train/loss", loss, step)
-
-                # Sync réseau cible
+        
+        episode_rewards = []
+        losses = []
+        episode_count = 0
+        collision_count = 0
+        
+        ep_reward = 0.0
+        ep_len = 0
+        ep_speeds = []
+        ep_sub_rewards = {}
+        
+        initial_step = step
+        start_time = time.time()
+        while step < total_timesteps:
+            
+            action = self.select_action(obs)
+            next_obs, reward, done, truncated, info = env.step(action)
+            
+            if "speed" in info:
+                ep_speeds.append(info["speed"])
+            if "rewards" in info:
+                for key, val in info["rewards"].items():
+                    if key not in ep_sub_rewards:
+                        ep_sub_rewards[key] = []
+                    ep_sub_rewards[key].append(val)
+                    
+            self.buffer.push(obs, action, reward, next_obs, float(done))
+            obs = next_obs
+            ep_reward += reward
+            ep_len += 1
+            step += 1
+            self.global_step = step
+            
+            # Mise à jour réseau
+            if step >= self.cfg.learning_starts and step % self.cfg.train_frequency == 0:
+                loss = self.update()
+                if loss is not None:
+                    losses.append(loss)
+                    if writer is not None:
+                        writer.add_scalar("train/loss", loss, step)
+            
+            # Sync réseau cible
                 if step % self.cfg.target_update_frequency == 0:
                     self.sync_target_network()
 
                 # Checkpoint périodique
                 if self.cfg.checkpoint_frequency > 0 and step % self.cfg.checkpoint_frequency == 0:
                     self.save_checkpoint(tag=f"step{step}")
+                    
+            if done or truncated:
+                
+                episode_rewards.append(ep_reward)
 
-            episode_rewards.append(ep_reward)
-
-            # ── Logging TensorBoard par épisode ──────────────────────────────
-            if writer is not None:
-                writer.add_scalar("train/episode_reward", ep_reward,  ep)
-                writer.add_scalar("train/episode_length", ep_len,     ep)
-                writer.add_scalar("train/epsilon",        self.get_epsilon(), step)
-                if losses:
-                    writer.add_scalar("train/loss_mean_ep",
-                                      float(np.mean(losses[-ep_len:])), ep)
-
+                # Logging TensorBoard par épisode
+                episode_count += 1
+                if info.get("crashed", False):
+                    collision_count += 1
+                collision_rate = collision_count / episode_count
+                
+                elapsed_time = time.time() - start_time
+                fps = int((step - initial_step) / max(elapsed_time, 1e-6))
+                
+                if writer is not None:
+                    writer.add_scalar("rollout/ep_rew_mean", ep_reward, step)
+                    writer.add_scalar("rollout/ep_len_mean", ep_len, step)
+                    writer.add_scalar("rollout/exploration_rate",self.get_epsilon(), step)
+                    writer.add_scalar("train/learning_rate", self.cfg.learning_rate, step)
+                    
+                    writer.add_scalar("time/fps", fps, step)
+                    
+                    writer.add_scalar("env/collision_rate", collision_rate, step)
+                    if ep_speeds:
+                        writer.add_scalar("env/speed", np.mean(ep_speeds), step)
+                    for key, vals in ep_sub_rewards.items():
+                        writer.add_scalar(f"env/reward_{key}", np.mean(vals), step)
+                    writer.flush()
+                
+                # Reset pour l'épisode suivant
+                obs, _ = env.reset()
+                ep_reward = 0.0
+                ep_len = 0
+                ep_speeds = []
+                ep_sub_rewards = {}
+                        
         # ── Fin d'entraînement ───────────────────────────────────────────────
         self.save_checkpoint(tag="final_episodic")
-
         if writer is not None:
             writer.flush()
             writer.close()
@@ -313,7 +344,7 @@ class DQNAgent(BaseAgent):
         greedy_mask = np.random.rand(n) >= self.get_epsilon()
         if greedy_mask.any():
             obs_t = torch.tensor(obs_batch[greedy_mask],
-                                 dtype=torch.float32, device=self.device)
+                                dtype=torch.float32, device=self.device)
             with torch.no_grad():
                 actions[greedy_mask] = self.q_net(obs_t).argmax(dim=1).cpu().numpy()
         return actions

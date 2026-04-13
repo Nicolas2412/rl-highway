@@ -178,7 +178,7 @@ class PERDQNAgent(BaseAgent):
         self.buffer.update_priorities(indices, td_errors.detach().cpu().numpy())
         return float(loss.item())
 
-    def train(self, env, num_episodes=500, seed=None, log_dir=None, run_name=None):
+    def train(self, env, total_timesteps=10_000, seed=None, log_dir=None, run_name=None):
         raise NotImplementedError("Use core_task/train_dqn_per.py for vectorized PER training.")
 
     def save(self, path):

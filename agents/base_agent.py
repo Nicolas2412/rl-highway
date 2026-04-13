@@ -17,7 +17,7 @@ class BaseAgent(ABC):
     def train(
         self,
         env,
-        num_episodes=500,
+        total_timesteps=10_000,
         seed=None,
         log_dir: Optional[str] = None,
         run_name: Optional[str] = None,
