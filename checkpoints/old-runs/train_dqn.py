@@ -11,7 +11,7 @@ AsyncVectorEnv renvoie (obs, reward, terminated, truncated, info).
 On stocke `terminated` dans le buffer (masque de bootstrap), et on reset sur
 `terminated | truncated`.
 
-python -m core_task.train_dqn
+python -m training.train_dqn
 
 ---- Sauvegarde des résultats -----
 

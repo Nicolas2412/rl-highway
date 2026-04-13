@@ -1,18 +1,25 @@
+import os
+import sys
+import argparse
+import warnings
+
+warnings.filterwarnings("ignore", category=UserWarning, module="pygame")
+
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.dirname(CURRENT_DIR)
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
+
 from shared_core_config import SHARED_CORE_CONFIG, SHARED_CORE_ENV_ID
 from agents.random_agent import RandomAgent
 from agents.dqn_sb3 import SB3DQNAgent
 from agents.dqn_per import PERDQNAgent, HighwayPERConfig
 from agents.dqn_custom import DQNAgent, HighwayDQNConfig
+
 from tqdm import tqdm
 import numpy as np
 import imageio
 import gymnasium as gym
-import os
-import argparse
-import warnings
-warnings.filterwarnings("ignore", category=UserWarning, module="pygame")
-
-
 import highway_env  # noqa: F401
 
 
@@ -150,6 +157,9 @@ if __name__ == "__main__":
     checkpoint = args.model_path or AGENT_REGISTRY[args.agent].get(
         "checkpoint")
 
+    if checkpoint and not os.path.isabs(checkpoint):
+        checkpoint = os.path.join(ROOT_DIR, checkpoint)
+        
     if args.agent != "random":
         if not checkpoint or not os.path.exists(checkpoint):
             print(f"Checkpoint not found: {checkpoint}")
@@ -169,6 +179,7 @@ if __name__ == "__main__":
             render=render,
             checkpoint=args.model_path,
             save_gif=args.save,
+            gif_path=os.path.join(ROOT_DIR, "results", "videos", f"episode_{args.agent}.gif")
         )
         rewards.append(r)
         steps_list.append(s)

@@ -6,8 +6,10 @@ import pandas as pd
 import seaborn as sns
 from matplotlib.lines import Line2D
 
-SUMMARY_PATH = "results/eval_summary.json"
-PLOT_DIR = "results/plots/extension/all"
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.dirname(CURRENT_DIR)
+SUMMARY_PATH = os.path.join(ROOT_DIR, "results", "eval_summary.json")
+PLOT_DIR = os.path.join(ROOT_DIR, "results", "plots", "extension", "all")
 
 to_plot = ["Random", "DQN Custom", "SB3 DQN", "DQN Double", "DQN Double+PER"]
 

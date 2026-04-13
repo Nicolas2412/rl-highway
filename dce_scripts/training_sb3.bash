@@ -22,6 +22,6 @@ source activate rl_hw_env
 echo "Démarrage de l'entraînement à $(date)"
 
 # On utilise les paramètres que nous avons validés ensemble
-python core_task/train_sb3.py "$@"
+python training/train_sb3.py "$@"
 
 echo "Entraînement terminé à $(date)"

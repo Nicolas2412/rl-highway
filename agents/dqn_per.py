@@ -179,7 +179,7 @@ class PERDQNAgent(BaseAgent):
         return float(loss.item())
 
     def train(self, env, total_timesteps=10_000, seed=None, log_dir=None, run_name=None):
-        raise NotImplementedError("Use core_task/train_dqn_per.py for vectorized PER training.")
+        raise NotImplementedError("Use training/train_dqn_per.py for vectorized PER training.")
 
     def save(self, path):
         torch.save(

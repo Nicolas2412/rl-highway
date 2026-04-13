@@ -3,7 +3,7 @@ from __future__ import annotations
 """
 Vectorized training entrypoint for simple DQN + Prioritized Experience Replay.
 
-This intentionally mirrors core_task/train_dqn.py so the PER variant remains
+This intentionally mirrors training/train_dqn.py so the PER variant remains
 isolated from the vanilla DQN pipeline.
 """
 

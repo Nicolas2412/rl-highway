@@ -10,7 +10,7 @@ PRUNE_CHECK_FREQ steps, et trial.should_prune() interrompt les trials
 manifestement sous-performants.
 
 Usage :
-    python -m core_task.hparam.hparam_search --n-trials 20 --fresh
+    python -m training.hparam.hparam_search --n-trials 20 --fresh
 """
 
 import argparse
@@ -31,7 +31,7 @@ from agents.dqn_custom import DQNAgent, HighwayDQNConfig
 
 TRIAL_STEPS      = 10_000
 PRUNE_CHECK_FREQ = 1_000   # fréquence de rapport intermédiaire au pruner
-RESULTS_DIR      = "core_task/hparam_results"
+RESULTS_DIR      = "training/hparam_results"
 DB_PATH          = os.path.join(RESULTS_DIR, "optuna_study.db")
 STUDY_NAME       = "highway_dqn"
 

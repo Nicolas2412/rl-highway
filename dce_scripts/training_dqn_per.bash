@@ -20,6 +20,6 @@ echo "Start: $(date)"
 echo "Host : $(hostname)"
 python -c "import sys, torch; print(sys.version); print(torch.__version__); print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'no gpu')"
 
-python core_task/train_dqn_per.py "$@"
+python training/train_dqn_per.py "$@"
 
 echo "End: $(date)"

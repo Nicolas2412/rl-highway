@@ -1,14 +1,21 @@
-from shared_core_config import SHARED_CORE_CONFIG, SHARED_CORE_ENV_ID
-from agents.random_agent import RandomAgent
-from agents.dqn_sb3 import SB3DQNAgent
-from agents.dqn_per import PERDQNAgent, HighwayPERConfig
-from agents.dqn_custom import DQNAgent, HighwayDQNConfig
 import hashlib
 import json
 import os
 import sys
 import warnings
 from dataclasses import fields
+
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.dirname(CURRENT_DIR)
+
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
+    
+from shared_core_config import SHARED_CORE_CONFIG, SHARED_CORE_ENV_ID
+from agents.random_agent import RandomAgent
+from agents.dqn_sb3 import SB3DQNAgent
+from agents.dqn_per import PERDQNAgent, HighwayPERConfig
+from agents.dqn_custom import DQNAgent, HighwayDQNConfig
 
 import numpy as np
 import gymnasium as gym
@@ -19,15 +26,13 @@ warnings.filterwarnings("ignore", category=UserWarning, module="pygame")
 import highway_env  # noqa: F401
 
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-if SCRIPT_DIR not in sys.path:
-    sys.path.insert(0, SCRIPT_DIR)
+
 
 SEEDS = [9, 42, 67]
 NUM_EPISODES = 50
 FORCE = False
 
-SUMMARY_PATH = os.path.join(SCRIPT_DIR, "results", "eval_summary.json")
+SUMMARY_PATH = os.path.join(ROOT_DIR, "results", "eval_summary.json")
 
 EVAL_REGISTRY = [
     {
@@ -76,7 +81,7 @@ def _get_params_from_registry(checkpoint_path: str, registry_file: str = "runs_r
     if not checkpoint_path:
         return {}
 
-    reg_path = os.path.join(SCRIPT_DIR, registry_file)
+    reg_path = os.path.join(ROOT_DIR, registry_file)
     if not os.path.exists(reg_path):
         return {}
 
@@ -106,6 +111,9 @@ def _load_agent(entry: dict, env: gym.Env):
     agent_type = entry["agent_type"]
     checkpoint = entry.get("checkpoint")
 
+    full_checkpoint_path = os.path.join(
+        ROOT_DIR, checkpoint) if checkpoint else None
+
     reg_params = _get_params_from_registry(
         checkpoint, "checkpoints/runs_registry.jsonl")
     merged = {**entry, **reg_params}
@@ -119,7 +127,7 @@ def _load_agent(entry: dict, env: gym.Env):
         cfg = _build_config(HighwayDQNConfig, merged)
         agent = DQNAgent(cfg, env.observation_space.shape, env.action_space.n)
         if checkpoint:
-            agent.load_checkpoint(checkpoint, show=False)
+            agent.load_checkpoint(full_checkpoint_path, show=False)
         return agent
 
     if agent_type == "dqn_per":
@@ -127,12 +135,12 @@ def _load_agent(entry: dict, env: gym.Env):
         agent = PERDQNAgent(
             cfg, env.observation_space.shape, env.action_space.n)
         if checkpoint:
-            agent.load_checkpoint(checkpoint, show=False)
+            agent.load_checkpoint(full_checkpoint_path, show=False)
         return agent
 
     if agent_type == "sb3":
         cfg = _build_config(HighwayDQNConfig, merged)
-        return SB3DQNAgent(model_path=checkpoint, env=env) if checkpoint else SB3DQNAgent(cfg=cfg, env=env)
+        return SB3DQNAgent(model_path=full_checkpoint_path, env=env) if checkpoint else SB3DQNAgent(cfg=cfg, env=env)
 
     raise ValueError(f"Unknown agent_type: {agent_type}")
 
@@ -289,7 +297,7 @@ def main() -> None:
     for entry in EVAL_REGISTRY:
         checkpoint = entry.get("checkpoint")
         checkpoint_name = (
-            os.path.relpath(checkpoint, SCRIPT_DIR).replace("\\", "/")
+            os.path.relpath(checkpoint, ROOT_DIR).replace("\\", "/")
             if checkpoint else "No Checkpoint"
         )
 
