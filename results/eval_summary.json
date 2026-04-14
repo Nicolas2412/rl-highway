@@ -1,0 +1,290 @@
+[
+  {
+    "name": "Random",
+    "agent_type": "random",
+    "checkpoint_used": "No Checkpoint",
+    "mean_reward": 9.636154899817075,
+    "std_reward": 7.044997738054801,
+    "median_reward": 7.343041374148335,
+    "success_rate": 0.10666666666666669,
+    "mean_length": 12.94,
+    "std_length": 9.104746015128594,
+    "mean_speed": 24.01572923342371,
+    "mean_crash_step": 10.907287570684941,
+    "seeds": [
+      9,
+      42,
+      67
+    ],
+    "num_episodes": 50,
+    "per_seed": [
+      {
+        "seed": 9,
+        "mean_reward": 10.250042883006024,
+        "std_reward": 7.4692852445947,
+        "success_rate": 0.14,
+        "mean_length": 13.84,
+        "mean_speed": 23.91539351786074,
+        "mean_crash_step": 11.209302325581396
+      },
+      {
+        "seed": 42,
+        "mean_reward": 9.341595237032255,
+        "std_reward": 6.402369348139368,
+        "success_rate": 0.07999999999999996,
+        "mean_length": 12.46,
+        "mean_speed": 24.345347317511113,
+        "mean_crash_step": 10.934782608695652
+      },
+      {
+        "seed": 67,
+        "mean_reward": 9.316826579412945,
+        "std_reward": 7.1798210023245925,
+        "success_rate": 0.09999999999999998,
+        "mean_length": 12.52,
+        "mean_speed": 23.786446864899276,
+        "mean_crash_step": 10.577777777777778
+      }
+    ]
+  },
+  {
+    "name": "DQN Custom",
+    "agent_type": "dqn_custom",
+    "checkpoint_used": "checkpoints/dqn_custom_20260413-082750/model_dqn_custom.pt",
+    "mean_reward": 20.868902015456396,
+    "std_reward": 7.091030835024719,
+    "median_reward": 24.12853158556072,
+    "success_rate": 0.5333333333333333,
+    "mean_length": 23.80666666666667,
+    "std_length": 7.992243461979593,
+    "mean_speed": 27.00621366359532,
+    "mean_crash_step": 16.80860805860806,
+    "seeds": [
+      9,
+      42,
+      67
+    ],
+    "num_episodes": 50,
+    "per_seed": [
+      {
+        "seed": 9,
+        "mean_reward": 22.68095172519663,
+        "std_reward": 5.977970997741291,
+        "success_rate": 0.6799999999999999,
+        "mean_length": 25.92,
+        "mean_speed": 26.78014912778679,
+        "mean_crash_step": 17.25
+      },
+      {
+        "seed": 42,
+        "mean_reward": 19.373759708753838,
+        "std_reward": 7.7085762697451115,
+        "success_rate": 0.43999999999999995,
+        "mean_length": 22.28,
+        "mean_speed": 26.92215147393274,
+        "mean_crash_step": 16.214285714285715
+      },
+      {
+        "seed": 67,
+        "mean_reward": 20.55199461241872,
+        "std_reward": 7.076048656103139,
+        "success_rate": 0.48,
+        "mean_length": 23.22,
+        "mean_speed": 27.31634038906644,
+        "mean_crash_step": 16.96153846153846
+      }
+    ]
+  },
+  {
+    "name": "SB3 DQN",
+    "agent_type": "sb3",
+    "checkpoint_used": "checkpoints/sb3_dqn/model_dqn_sb3.zip",
+    "mean_reward": 24.797836133234075,
+    "std_reward": 8.006393077983933,
+    "median_reward": 29.547635218783377,
+    "success_rate": 0.6533333333333333,
+    "mean_length": 25.473333333333333,
+    "std_length": 7.7388170212823155,
+    "mean_speed": 29.309702324605592,
+    "mean_crash_step": 16.972910216718265,
+    "seeds": [
+      9,
+      42,
+      67
+    ],
+    "num_episodes": 50,
+    "per_seed": [
+      {
+        "seed": 9,
+        "mean_reward": 25.055740881144256,
+        "std_reward": 7.814254235427413,
+        "success_rate": 0.6599999999999999,
+        "mean_length": 25.7,
+        "mean_speed": 29.33765162947433,
+        "mean_crash_step": 17.352941176470587
+      },
+      {
+        "seed": 42,
+        "mean_reward": 24.01509525310779,
+        "std_reward": 8.666104029826029,
+        "success_rate": 0.62,
+        "mean_length": 24.8,
+        "mean_speed": 29.149074363151932,
+        "mean_crash_step": 16.31578947368421
+      },
+      {
+        "seed": 67,
+        "mean_reward": 25.322672265450173,
+        "std_reward": 7.428890289660354,
+        "success_rate": 0.6799999999999999,
+        "mean_length": 25.92,
+        "mean_speed": 29.442380981190514,
+        "mean_crash_step": 17.25
+      }
+    ]
+  },
+  {
+    "name": "DQN Double",
+    "agent_type": "dqn_custom",
+    "checkpoint_used": "checkpoints/dqn_20260411-135652/20260413-063222_dqn_highway_final.pt",
+    "mean_reward": 25.946063747708454,
+    "std_reward": 6.749510410299863,
+    "median_reward": 29.74143798322386,
+    "success_rate": 0.6733333333333333,
+    "mean_length": 26.426666666666666,
+    "std_length": 6.3826292039844805,
+    "mean_speed": 29.594162586932793,
+    "mean_crash_step": 18.86081871345029,
+    "seeds": [
+      9,
+      42,
+      67
+    ],
+    "num_episodes": 50,
+    "per_seed": [
+      {
+        "seed": 9,
+        "mean_reward": 25.894810112858522,
+        "std_reward": 7.0408215234071685,
+        "success_rate": 0.7,
+        "mean_length": 26.4,
+        "mean_speed": 29.507571315339195,
+        "mean_crash_step": 18.0
+      },
+      {
+        "seed": 42,
+        "mean_reward": 26.16591773744014,
+        "std_reward": 5.870676240314425,
+        "success_rate": 0.62,
+        "mean_length": 26.7,
+        "mean_speed": 29.60586482121576,
+        "mean_crash_step": 21.31578947368421
+      },
+      {
+        "seed": 67,
+        "mean_reward": 25.777463392826693,
+        "std_reward": 7.249156937301069,
+        "success_rate": 0.7,
+        "mean_length": 26.18,
+        "mean_speed": 29.669051624243426,
+        "mean_crash_step": 17.266666666666666
+      }
+    ]
+  },
+  {
+    "name": "DQN PER",
+    "agent_type": "dqn_per",
+    "checkpoint_used": "checkpoints/per_dqn_20260411-191026/20260412-021940_per_dqn_final.pt",
+    "mean_reward": 23.370807630530624,
+    "std_reward": 8.051927659803853,
+    "median_reward": 27.843310127113813,
+    "success_rate": 0.6066666666666667,
+    "mean_length": 24.713333333333335,
+    "std_length": 7.969388656324621,
+    "mean_speed": 28.584640330593384,
+    "mean_crash_step": 16.429459064327485,
+    "seeds": [
+      9,
+      42,
+      67
+    ],
+    "num_episodes": 50,
+    "per_seed": [
+      {
+        "seed": 9,
+        "mean_reward": 23.723930787601816,
+        "std_reward": 7.733361625980132,
+        "success_rate": 0.62,
+        "mean_length": 24.94,
+        "mean_speed": 28.70677695096916,
+        "mean_crash_step": 16.68421052631579
+      },
+      {
+        "seed": 42,
+        "mean_reward": 22.479681162933097,
+        "std_reward": 8.328503776024242,
+        "success_rate": 0.52,
+        "mean_length": 23.9,
+        "mean_speed": 28.529850589514645,
+        "mean_crash_step": 17.291666666666668
+      },
+      {
+        "seed": 67,
+        "mean_reward": 23.908810941056956,
+        "std_reward": 8.00771565574483,
+        "success_rate": 0.6799999999999999,
+        "mean_length": 25.3,
+        "mean_speed": 28.517293451296332,
+        "mean_crash_step": 15.3125
+      }
+    ]
+  },
+  {
+    "name": "DQN Double+PER",
+    "agent_type": "dqn_per",
+    "checkpoint_used": "checkpoints/20260412-084516_per_double_dqn/20260412-084516_per_double_dqn_final.pt",
+    "mean_reward": 24.884863935636133,
+    "std_reward": 6.964044635831777,
+    "median_reward": 28.327761405869218,
+    "success_rate": 0.7266666666666667,
+    "mean_length": 26.426666666666666,
+    "std_length": 6.878320208371291,
+    "mean_speed": 28.415255074041088,
+    "mean_crash_step": 16.743055555555554,
+    "seeds": [
+      9,
+      42,
+      67
+    ],
+    "num_episodes": 50,
+    "per_seed": [
+      {
+        "seed": 9,
+        "mean_reward": 24.51877263787877,
+        "std_reward": 7.455063405590997,
+        "success_rate": 0.6799999999999999,
+        "mean_length": 25.74,
+        "mean_speed": 28.735583864277974,
+        "mean_crash_step": 16.6875
+      },
+      {
+        "seed": 42,
+        "mean_reward": 24.444514072654414,
+        "std_reward": 6.88309201465236,
+        "success_rate": 0.6799999999999999,
+        "mean_length": 26.12,
+        "mean_speed": 28.271847504655593,
+        "mean_crash_step": 17.875
+      },
+      {
+        "seed": 67,
+        "mean_reward": 25.691305096375203,
+        "std_reward": 6.446747150320311,
+        "success_rate": 0.8200000000000001,
+        "mean_length": 27.42,
+        "mean_speed": 28.238333853189697,
+        "mean_crash_step": 15.666666666666666
+      }
+    ]
+  }
+]

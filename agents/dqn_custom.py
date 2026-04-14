@@ -1,295 +1,342 @@
-# Imports
-import sys
+"""
+Defines the DQNAgent class implementing a custom DQN
+Linear Epsilon Decay
+Includes a flag to activate double DQN
+"""
+
+import os
+import random
+import time
+import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
-import numpy as np
-import random
-from copy import deepcopy
-import gymnasium as gym
+from collections import deque
+from dataclasses import dataclass, field
+from typing import Any, List, Optional
 from agents.base_agent import BaseAgent
-import os
-import matplotlib.pyplot as plt
-from torch.utils.tensorboard import SummaryWriter
-import time
+import gymnasium as gym 
+import highway_env  # noqa: F401
+from shared_core_config import SHARED_CORE_CONFIG
 
-class ReplayBuffer:
-    def __init__(self, capacity):
-        self.capacity = capacity
-        self.memory = []
-        self.position = 0
+# Config class, is also used by the sb3 version
+@dataclass
+class HighwayDQNConfig:
+    env_id: str = "highway-v0"
+    seed: int = 42
+    hidden_dims: List[int] = field(default_factory=lambda: [256, 256])
+    total_timesteps: int = 200_000
+    learning_rate: float = 0.0001432249371823026
+    gamma: float = 0.8296389588638785
+    batch_size: int = 64
+    buffer_capacity: int = 30000
+    learning_starts: int = 200
+    train_frequency: int = 1
+    target_update_frequency: int = 50
+    epsilon_start: float = 1.0
+    epsilon_end: float = 0.01
+    epsilon_decay_steps: int = 150_000
+    double_dqn: bool = False
+    checkpoint_dir: str = "../rl-highway/checkpoints"
+    checkpoint_frequency: int = 10_000
 
-    def push(self, state, action, reward, terminated, next_state):
-        """Saves a transition."""
-        if len(self.memory) < self.capacity:
-            self.memory.append(None)
-        self.memory[self.position] = (state, action, reward, terminated, next_state)
-        self.position = (self.position + 1) % self.capacity
-
-    def sample(self, batch_size):
-        return random.choices(self.memory, k=batch_size)
-
-    def __len__(self):
-        return len(self.memory)
-
-
-class Net(nn.Module):
-    """
-    Basic neural net.
-    """
-
-    def __init__(self, obs_size, hidden_size, n_actions):
-        super(Net, self).__init__()
-        self.net = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(obs_size, hidden_size),
-            nn.ReLU(),
-            nn.Linear(hidden_size, n_actions),
-        )
+# Q Network class
+class HighwayQNetwork(nn.Module):
+    def __init__(self, obs_shape, n_actions, hidden_dims):
+        super().__init__()
+        input_dim = int(np.prod(obs_shape))
+        layers, in_dim = [], input_dim
+        for h in hidden_dims:
+            layers += [nn.Linear(in_dim, h), nn.ReLU()]
+            in_dim = h
+        layers.append(nn.Linear(in_dim, n_actions))
+        self.net = nn.Sequential(*layers)
 
     def forward(self, x):
-        return self.net(x)
+        # Flattens every dimension except the batch
+        return self.net(x.flatten(start_dim=1) if x.dim() > 1 else x.flatten())
 
 
+# Replay Buffer
+class ReplayBuffer:
+    def __init__(self, capacity):
+        self.buffer = deque(maxlen=capacity)
+
+    def push(self, s, a, r, s_, terminated):
+        self.buffer.append((
+            np.array(s, dtype=np.float32),
+            int(a),
+            float(r),
+            np.array(s_, dtype=np.float32),
+            float(terminated),   # terminated only, not done (for bootstrap)
+        ))
+
+    def sample(self, batch_size):
+        batch = random.sample(self.buffer, batch_size)
+        s, a, r, s_, d = zip(*batch)
+        return (
+            np.stack(s),
+            np.array(a, dtype=np.int64),
+            np.array(r, dtype=np.float32),
+            np.stack(s_),
+            np.array(d, dtype=np.float32),
+        )
+
+    def __len__(self):
+        return len(self.buffer)
+
+
+# Agent
 class DQNAgent(BaseAgent):
-    def __init__(
-        self,
-        action_space,
-        observation_space,
-        gamma=0.99,
-        batch_size=16,
-        buffer_capacity=15_000,
-        update_target_every=100,
-        epsilon_start=1,
-        decrease_epsilon_factor=100,
-        epsilon_min=0.05,
-        learning_rate=5e-4,
-        hidden_size=128,
-    ):
-        self.action_space = action_space
-        self.observation_space = observation_space
-        self.gamma = gamma
+    def __init__(self, cfg: HighwayDQNConfig, obs_shape, n_actions):
+        self.cfg = cfg
+        self.n_actions = n_actions
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        self.batch_size = batch_size
-        self.buffer_capacity = buffer_capacity
-        self.update_target_every = update_target_every
+        self.q_net      = HighwayQNetwork(obs_shape, n_actions, cfg.hidden_dims).to(self.device)
+        self.target_net = HighwayQNetwork(obs_shape, n_actions, cfg.hidden_dims).to(self.device)
+        self.target_net.load_state_dict(self.q_net.state_dict())
+        self.target_net.eval()
 
-        self.epsilon_start = epsilon_start
-        self.decrease_epsilon_factor = (
-            decrease_epsilon_factor  # larger -> more exploration
-        )
-        self.epsilon_min = epsilon_min
+        self.optimizer = optim.Adam(self.q_net.parameters(), lr=cfg.learning_rate)
+        self.buffer    = ReplayBuffer(cfg.buffer_capacity)
+        self.global_step = 0
 
-        self.learning_rate = learning_rate
-        self.hidden_size = hidden_size
-        
-        self.reset()
-        
-    @property
-    def needs_training(self):
-        return True
+        os.makedirs(cfg.checkpoint_dir, exist_ok=True)
 
-    def update(self, state, action, reward, terminated, next_state):
+    # BaseAgent interface
 
-        # add data to replay buffer
-        self.buffer.push(
-            torch.tensor(state, dtype=torch.float32).unsqueeze(0),
-            torch.tensor([[action]], dtype=torch.int64),
-            torch.tensor([reward], dtype=torch.float32),        # ← add dtype
-            torch.tensor([terminated], dtype=torch.float32),    # ← change to float32 too
-            torch.tensor(next_state, dtype=torch.float32).unsqueeze(0),
-        )
+    def act(self, obs, epsilon=None) -> int:
+        """Greedy selection (for evaluation), ignoring epsilon"""
+        return self._greedy(obs)
 
-        if len(self.buffer) < self.batch_size:
-            return np.inf
+    def update(self, obs=None, action=None, reward=None,
+            terminated=None, next_obs=None) -> Optional[float]:
+        """
+        Samples a mini-batch from the buffer and performs a network update.
+        Positional arguments are retained to match the BaseAgent signature; 
+        pushing to the buffer is handled upstream by the training loop 
+        (train_highway_dqn / train_vectorized / train).
+        Returns the loss, or None if the buffer is too small.
+        """
+        if len(self.buffer) < self.cfg.batch_size:
+            return None
 
-        # get batch
-        transitions = self.buffer.sample(self.batch_size)
+        s, a, r, s_, d = self.buffer.sample(self.cfg.batch_size)
+        s  = torch.tensor(s,  dtype=torch.float32, device=self.device)
+        a  = torch.tensor(a,  dtype=torch.long,    device=self.device)
+        r  = torch.tensor(r,  dtype=torch.float32, device=self.device)
+        s_ = torch.tensor(s_, dtype=torch.float32, device=self.device)
+        d  = torch.tensor(d,  dtype=torch.float32, device=self.device)
 
-        (
-            state_batch,
-            action_batch,
-            reward_batch,
-            terminated_batch,
-            next_state_batch,
-        ) = tuple([torch.cat(data) for data in zip(*transitions)])
+        current_q = self.q_net(s).gather(1, a.unsqueeze(1)).squeeze(1)
 
-        values = self.q_net.forward(state_batch).gather(1, action_batch)
-
-        # Compute the ideal Q values
         with torch.no_grad():
-            next_state_values = (1 - terminated_batch) * self.target_net(
-                next_state_batch
-            ).max(1)[0]
-            targets = next_state_values * self.gamma + reward_batch
+            if self.cfg.double_dqn:
+                best_a     = self.q_net(s_).argmax(dim=1, keepdim=True)
+                max_next_q = self.target_net(s_).gather(1, best_a).squeeze(1)
+            else:
+                max_next_q = self.target_net(s_).max(dim=1).values
+            target_q = r + self.cfg.gamma * max_next_q * (1.0 - d)
 
-        loss = self.loss_function(values, targets.unsqueeze(1))
-
-        # Optimize the model
+        loss = nn.functional.mse_loss(current_q, target_q)
         self.optimizer.zero_grad()
         loss.backward()
-        torch.nn.utils.clip_grad_value_(self.q_net.parameters(), 100)
+        nn.utils.clip_grad_norm_(self.q_net.parameters(), 10.0)
         self.optimizer.step()
+        return loss.item()
 
-        if not ((self.n_steps + 1) % self.update_target_every):
-            self.target_net.load_state_dict(self.q_net.state_dict())
-
-        self.decrease_epsilon()
-
-        self.n_steps += 1
-        if terminated:
-            self.n_eps += 1
-
-        return loss.detach().numpy()
-
-    def act(self, state, epsilon=None):
+    def train(self, env, total_timesteps: int = 10_000,
+            seed: Optional[int] = None,
+            log_dir: Optional[str] = None,
+            run_name: Optional[str] = None) -> None:
         """
-        Return action according to an epsilon-greedy exploration policy
+        Episodic training loop (BaseAgent interface).
+        Used by evaluate_over_seeds; operates on a single (non-vectorized) env, 
+        unlike train_vectorized.
+
+        Hyperparameters (lr, gamma, epsilon...) are read from self.cfg.
+        TensorBoard: logs to log_dir/run_name if provided.
         """
-        if epsilon is None:
-            epsilon = self.epsilon
 
-        if np.random.rand() < epsilon:
-            return self.action_space.sample()
-        else:
-            return np.argmax(self.get_q(state))
+        # Reproductibility
+        _seed = seed if seed is not None else self.cfg.seed
+        random.seed(_seed)
+        np.random.seed(_seed)
+        torch.manual_seed(_seed)
+
+        # TensorBoard
+        writer = None
+        if log_dir is not None:
+            from torch.utils.tensorboard import SummaryWriter
+            writer = SummaryWriter(log_dir=log_dir)
+
+        # Environment configuration
+        # The env is given via evaluate_over_seeds ; we configure it here if
+        # it exposes configure().
+        if hasattr(env.unwrapped, "configure"):
+            env.unwrapped.configure(SHARED_CORE_CONFIG)
+
+        obs, _ = env.reset(seed=_seed)
+        step = self.global_step
         
-    def get_q(self, state):
-      with torch.no_grad():
-          return self.q_net(torch.tensor(state, dtype=torch.float32).unsqueeze(0)).numpy()[0]
-
-    def decrease_epsilon(self):
-        self.epsilon = self.epsilon_min + (self.epsilon_start - self.epsilon_min) * (
-            np.exp(-1.0 * self.n_eps / self.decrease_epsilon_factor)
-        )
-
-    def reset(self):
-        hidden_size = self.hidden_size
-
-        obs_size = np.prod(self.observation_space.shape)
-        n_actions = self.action_space.n
-
-        self.buffer = ReplayBuffer(self.buffer_capacity)
-        self.q_net = Net(obs_size, hidden_size, n_actions)
-        self.target_net = Net(obs_size, hidden_size, n_actions)
-
-        self.loss_function = nn.MSELoss()
-        self.optimizer = optim.Adam(
-            params=self.q_net.parameters(), lr=self.learning_rate
-        )
-
-        self.epsilon = self.epsilon_start
-        self.n_steps = 0
-        self.n_eps = 0
-        
-    def train(self, env, num_episodes=500, seed=None, log_dir="results/logs/dqn_custom", run_name="DQN_Custom"):
-        if seed is not None:
-            np.random.seed(seed)
-            torch.manual_seed(seed)
-
-        os.makedirs(log_dir, exist_ok=True)
-        writer = SummaryWriter(log_dir=os.path.join(log_dir, run_name))
-
+        episode_rewards = []
+        losses = []
         episode_count = 0
         collision_count = 0
         
-        start_time = time.time()
-        total_steps = 0
-    
-        obs, _ = env.reset(seed=seed)
-        for ep in range(num_episodes):
-            obs, _ = env.reset()
-            done, truncated = False, False
-            total_reward, steps, crashed = 0, 0, False
-            step_start = time.time()
-            while not (done or truncated):
-                action = self.act(obs)
-                next_obs, reward, done, truncated, info = env.step(action)
-                
-                #Log Tensorboard par step
-                if "speed" in info:
-                    writer.add_scalar("env/speed", info["speed"], total_steps)
-                if "rewards" in info:
-                    for key, val in info["rewards"].items():
-                        writer.add_scalar(f"env/reward_{key}", val, total_steps)
-                
-                loss = self.update(obs, action, reward, done or truncated, next_obs)
-                if loss is not None and loss != np.inf:
-                    writer.add_scalar("train/loss", loss, total_steps)
-                    
-                if total_steps % 10 == 0:
-                    writer.add_scalar("train/learning_rate", self.optimizer.param_groups[0]['lr'], total_steps)
-                    
-                    elapsed_time = time.time() - start_time
-                    fps = total_steps / elapsed_time if elapsed_time > 0 else 0
-                    writer.add_scalar("time/fps", fps, total_steps)
-                    
-                    writer.add_scalar("rollout/exploration_rate", self.epsilon, total_steps)
-                    
-                obs = next_obs
-                total_reward += reward
-                steps += 1
-                total_steps += 1
-                if info.get("crashed", False):
-                    crashed = True
-            
-            #Log Tensoboard par episode
-            episode_count += 1
-            if crashed:
-                collision_count += 1
-                
-            writer.add_scalar("rollout/ep_rew_mean", total_reward, total_steps)
-            writer.add_scalar("rollout/ep_len_mean", steps, total_steps)
-            writer.add_scalar("env/collision_rate", collision_count / episode_count, total_steps)
-            writer.add_scalar("env/epsilon", self.epsilon, total_steps)
+        ep_reward = 0.0
+        ep_len = 0
+        ep_speeds = []
+        ep_sub_rewards = {}
         
-        writer.close()
+        initial_step = step
+        start_time = time.time()
+        while step < total_timesteps:
+            
+            action = self.select_action(obs)
+            next_obs, reward, done, truncated, info = env.step(action)
+            
+            if "speed" in info:
+                ep_speeds.append(info["speed"])
+            if "rewards" in info:
+                for key, val in info["rewards"].items():
+                    if key not in ep_sub_rewards:
+                        ep_sub_rewards[key] = []
+                    ep_sub_rewards[key].append(val)
+                    
+            self.buffer.push(obs, action, reward, next_obs, float(done))
+            obs = next_obs
+            ep_reward += reward
+            ep_len += 1
+            step += 1
+            self.global_step = step
+            
+            # Update Network
+            if step >= self.cfg.learning_starts and step % self.cfg.train_frequency == 0:
+                loss = self.update()
+                if loss is not None:
+                    losses.append(loss)
+                    if writer is not None:
+                        writer.add_scalar("train/loss", loss, step)
+            
+            # Synchronyze target network
+            if step % self.cfg.target_update_frequency == 0:
+                self.sync_target_network()
 
-    def _plot_training(self, rewards, lengths, collisions, path):
-        window = 50
+            # Checkpoint save
+            if self.cfg.checkpoint_frequency > 0 and step % self.cfg.checkpoint_frequency == 0:
+                self.save_checkpoint(tag=f"step{step}")
+                    
+            if done or truncated:
+                
+                episode_rewards.append(ep_reward)
 
-        def smooth(data):
-            return [np.mean(data[max(0, i - window):i + 1]) for i in range(len(data))]
+                # Logging TensorBoard by episode
+                episode_count += 1
+                if info.get("crashed", False):
+                    collision_count += 1
+                collision_rate = collision_count / episode_count
+                
+                elapsed_time = time.time() - start_time
+                fps = int((step - initial_step) / max(elapsed_time, 1e-6))
+                
+                if writer is not None:
+                    writer.add_scalar("rollout/ep_rew_mean", ep_reward, step)
+                    writer.add_scalar("rollout/ep_len_mean", ep_len, step)
+                    writer.add_scalar("rollout/exploration_rate",self.get_epsilon(), step)
+                    writer.add_scalar("train/learning_rate", self.cfg.learning_rate, step)
+                    
+                    writer.add_scalar("time/fps", fps, step)
+                    
+                    writer.add_scalar("env/collision_rate", collision_rate, step)
+                    if ep_speeds:
+                        writer.add_scalar("env/speed", np.mean(ep_speeds), step)
+                    for key, vals in ep_sub_rewards.items():
+                        writer.add_scalar(f"env/reward_{key}", np.mean(vals), step)
+                    writer.flush()
+                
+                # Reset for next episode
+                obs, _ = env.reset()
+                ep_reward = 0.0
+                ep_len = 0
+                ep_speeds = []
+                ep_sub_rewards = {}
+                        
+        # End of training
+        self.save_checkpoint(tag="final_episodic")
+        if writer is not None:
+            writer.flush()
+            writer.close()
 
-        metrics = [
-            (rewards,    "Episode Reward",    "Total Reward", "steelblue"),
-            (lengths,    "Episode Length",    "Steps",        "darkorange"),
-            (collisions, "Collision Rate",    "Collision Rate","crimson"),
-        ]
+    def save(self, path: str) -> None:
+        """Interface BaseAgent -> delegates to save_checkpoint with the given path."""
+        torch.save({
+            "q_net":       self.q_net.state_dict(),
+            "target_net":  self.target_net.state_dict(),
+            "optimizer":   self.optimizer.state_dict(),
+            "global_step": self.global_step,
+        }, path)
 
-        base, ext = os.path.splitext(path)
-        dir_name = os.path.dirname(path)
-        if dir_name:
-            os.makedirs(dir_name, exist_ok=True)
+    def load(self, path: str) -> None:
+        """Interface BaseAgent -> delegates to load_checkpoint."""
+        self.load_checkpoint(path)
 
-        for data, title, ylabel, color in metrics:
-            fig, ax = plt.subplots(figsize=(7, 4))
-            ax.plot(data, alpha=0.2, color=color)
-            ax.plot(smooth(data), label=f"Smoothed (w={window})", color=color)
-            ax.set_title(f"DQN Custom — {title}")
-            ax.set_xlabel("Episode")
-            ax.set_ylabel(ylabel)
-            if ylabel == "Collision Rate":
-                ax.set_ylim(0, 1)
-            ax.legend()
-            plt.tight_layout()
+    # Internal methods
 
-            slug = title.lower().replace(" ", "_")
-            save_path = f"{base}_{slug}{ext}"
-            plt.savefig(save_path)
-            plt.close()
-            print(f"Saved: {save_path}")
+    def get_epsilon(self) -> float:
+        frac = min(1.0, self.global_step / self.cfg.epsilon_decay_steps)
+        return self.cfg.epsilon_start + frac * (self.cfg.epsilon_end - self.cfg.epsilon_start)
 
-    def save(self, path):
-        import os, torch
-        dir_name = os.path.dirname(path)
-        if dir_name:
-            os.makedirs(dir_name, exist_ok=True)
-        torch.save(self.q_net.state_dict(), path)
+    def select_action(self, obs) -> int:
+        """epsilon-greedy (training)."""
+        if random.random() < self.get_epsilon():
+            return random.randint(0, self.n_actions - 1)
+        return self._greedy(obs)
 
-    def load(self, path):
-        import torch
-        self.q_net.load_state_dict(torch.load(path))
-        self.target_net.load_state_dict(torch.load(path))
-        self.epsilon = self.epsilon_min
+    def select_actions_batch(self, obs_batch: np.ndarray) -> np.ndarray:
+        """epsilon-greedy vectorized for N envs (train_vectorized)."""
+        n = len(obs_batch)
+        actions = np.array([random.randint(0, self.n_actions - 1) for _ in range(n)])
+        greedy_mask = np.random.rand(n) >= self.get_epsilon()
+        if greedy_mask.any():
+            obs_t = torch.tensor(obs_batch[greedy_mask],
+                                dtype=torch.float32, device=self.device)
+            with torch.no_grad():
+                actions[greedy_mask] = self.q_net(obs_t).argmax(dim=1).cpu().numpy()
+        return actions
+
+    def _greedy(self, obs) -> int:
+        """Greedy selection over one observation"""
+        obs_t = torch.tensor(obs, dtype=torch.float32, device=self.device)
+        # Ensures that the batch dimension respects obs dimension
+        if obs_t.dim() < 2:
+            obs_t = obs_t.unsqueeze(0)
+        elif obs_t.dim() == 2:
+            obs_t = obs_t.unsqueeze(0)   # (H, W) → (1, H, W)
+        with torch.no_grad():
+            return self.q_net(obs_t).argmax(dim=1).item()
+
+    def sync_target_network(self) -> None:
+        self.target_net.load_state_dict(self.q_net.state_dict())
+
+    def save_checkpoint(self, tag: str = "latest") -> str:
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        path = os.path.join(self.cfg.checkpoint_dir,
+                            f"{timestamp}_dqn_highway_{tag}.pt")
+        torch.save({
+            "q_net":       self.q_net.state_dict(),
+            "target_net":  self.target_net.state_dict(),
+            "optimizer":   self.optimizer.state_dict(),
+            "global_step": self.global_step,
+        }, path)
+        return path
+
+    def load_checkpoint(self, path: str, show:bool=True) -> None:
+        ckpt = torch.load(path, map_location=self.device)
+        self.q_net.load_state_dict(ckpt["q_net"])
+        self.target_net.load_state_dict(ckpt["target_net"])
+        self.optimizer.load_state_dict(ckpt["optimizer"])
+        self.global_step = ckpt["global_step"]
+        if show:
+            print(f"Checkpoint loaded from {path} (step {self.global_step})")

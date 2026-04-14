@@ -2,15 +2,14 @@ from agents.base_agent import BaseAgent
 
 class RandomAgent(BaseAgent):
     """
-    Un agent basique qui sélectionne des actions de manière purement aléatoire.
+    Random agent for baseline
     """
     def __init__(self, action_space, observation_space, **kwargs):
         self.action_space = action_space
 
-    def act(self, observation):
+    def act(self, obs,epsilon=None)-> int:
         """
-        Renvoie une action aléatoire tirée de l'espace d'actions.
-        L'observation est ignorée.
+        Select a completely random action in the action space
         """
         action = self.action_space.sample()
         return action

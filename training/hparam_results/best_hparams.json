@@ -1,0 +1,14 @@
+{
+  "best_value": 13.305505228180564,
+  "best_params": {
+    "hidden": 256,
+    "n_layers": 2,
+    "lr": 0.0001432249371823026,
+    "gamma": 0.8296389588638785,
+    "batch_size": 64,
+    "buffer_cap": 30000,
+    "eps_decay": 150000,
+    "target_upd": 50,
+    "double_dqn": false
+  }
+}
