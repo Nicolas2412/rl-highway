@@ -75,3 +75,5 @@ Pour lancer le benchmark complet sur les différents modèles (sur 3 seeds diff�
 Pour générer ou mettre à jour les graphiques de comparaison PNG dans le dossier results/plots/ à partir de l'évaluation :
 
     python evaluation/plot_eval.py
+
+![Model comparison](results\plots\extension\all\global_metrics.png)
