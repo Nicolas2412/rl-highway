@@ -76,4 +76,4 @@ Pour générer ou mettre à jour les graphiques de comparaison PNG dans le dossi
 
     python evaluation/plot_eval.py
 
-![Model comparison](results\plots\extension\all\global_metrics.png)
+![Model comparison](results/plots/extension/all/global_metrics.png)
