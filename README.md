@@ -80,7 +80,7 @@ Pour générer ou mettre à jour les graphiques de comparaison PNG dans le dossi
 
 ### 4. Lancer le fine-tuning des hyperparamètres
 
-Le fine-tuning choisit utilise un *Tree-structured Parzen Estimator* (TPE). Pour le lancer à partir du dossier source :
+Le fine-tuning choisi utilise un *Tree-structured Parzen Estimator* (TPE). Pour le lancer à partir du dossier source :
 
     python -m training.hparam.hparam_search --n-trials 20 --fresh
 
@@ -92,4 +92,4 @@ Pour visualiser les résultats du fine-tuning à partir à partir de `optuna_stu
 
     python training/hparam/hparam_viz.py --study-db hparam_results/optuna_study.db --save
 
-L'argument `--study-db`permet de déterminer quelle base de données de résultats chargée.
+L'argument `--study-db`permet de déterminer quelle base de données de résultats du fine-tuning chargée.

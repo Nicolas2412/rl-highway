@@ -2,7 +2,7 @@
 Recherche d'hyperparamètres DQN avec Optuna.
 
 Usage :
-    python -m core_task.hparam.hparam_search --n-trials 20 --fresh
+    python -m training.hparam.hparam_search --n-trials 20 --fresh
 """
 
 import argparse

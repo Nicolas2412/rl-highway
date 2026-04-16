@@ -2,10 +2,10 @@
 Visualisation des résultats de la recherche d'hyperparamètres.
 
 Usage :
-    python core_task/hparam/hparam_viz.py --study-db hparam_results/optuna_study.db
-    python core_task/hparam/hparam_viz.py --study-db hparam_results/optuna_study.db --save
+    python training/hparam/hparam_viz.py --study-db hparam_results/optuna_study.db
+    python training/hparam/hparam_viz.py --study-db hparam_results/optuna_study.db --save
 
-    rl-highway\core_task\hparam\hparam_viz.py
+    rl-highway\training\hparam\hparam_viz.py
 """
 
 import argparse
