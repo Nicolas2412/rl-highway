@@ -9,6 +9,7 @@ import os
 import sys
 import warnings
 from dataclasses import fields
+import torch
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(CURRENT_DIR)
@@ -28,16 +29,13 @@ from tqdm import tqdm
 
 warnings.filterwarnings("ignore", category=UserWarning, module="pygame")
 
-import highway_env  # noqa: F401
-
-
-
+import highway_env 
 
 SEEDS = [9, 42, 67]
 NUM_EPISODES = 50
 FORCE = False
 
-SUMMARY_PATH = os.path.join(ROOT_DIR, "results", "eval_summary.json")
+SUMMARY_PATH = os.path.join(ROOT_DIR, "results", "fine-tuned_vs_non-fine-tuned", "eval_summary.json")
 
 EVAL_REGISTRY = [
     {
@@ -46,32 +44,28 @@ EVAL_REGISTRY = [
         "checkpoint": None,
     },
     {
-        "name":       "DQN Custom",
+        "name":       "Vanilla DQN - not fine tuned",
         "agent_type": "dqn_custom",
-        "checkpoint": "checkpoints/dqn_custom_20260413-082750/model_dqn_custom.pt",
+        "checkpoint": "checkpoints/simple-dqn_not_fine-tuned/20260410-112718_dqn_highway_final_episodic.pt",
     },
+
     {
-        "name":       "SB3 DQN",
-        "agent_type": "sb3",
-        "checkpoint": "checkpoints/sb3_dqn/model_dqn_sb3.zip",
-    },
-    {
-        "name":       "DQN Double",
+        "name":       "Vanilla DQN - fine-tuned",
         "agent_type": "dqn_custom",
-        "checkpoint": "checkpoints/dqn_20260411-135652/20260413-063222_dqn_highway_final.pt",
-        "double_dqn": True,
+        "checkpoint": "checkpoints/dqn_custom_20260413-082750/20260413-082030_dqn_highway_step110000.pt",
+        "double_dqn": False,
     },
-    {
-        "name":       "DQN PER",
-        "agent_type": "dqn_per",
-        "checkpoint": "checkpoints/per_dqn_20260411-191026/20260412-021940_per_dqn_final.pt",
-    },
-    {
-        "name":       "DQN Double+PER",
-        "agent_type": "dqn_per",
-        "checkpoint": "checkpoints/20260412-084516_per_double_dqn/20260412-084516_per_double_dqn_final.pt",
-        "double_dqn": True,
-    },
+    # {
+    #     "name":       "DQN PER",
+    #     "agent_type": "dqn_per",
+    #     "checkpoint": "checkpoints/per_dqn_20260411-191026/20260412-021940_per_dqn_final.pt",
+    # },
+    # {
+    #     "name":       "DQN Double+PER",
+    #     "agent_type": "dqn_per",
+    #     "checkpoint": "checkpoints/20260412-084516_per_double_dqn/20260412-084516_per_double_dqn_final.pt",
+    #     "double_dqn": True,
+    # },
 ]
 
 
@@ -115,12 +109,9 @@ def _build_config(config_class, params_dict: dict):
 def _load_agent(entry: dict, env: gym.Env):
     agent_type = entry["agent_type"]
     checkpoint = entry.get("checkpoint")
+    full_checkpoint_path = os.path.join(ROOT_DIR, checkpoint) if checkpoint else None
 
-    full_checkpoint_path = os.path.join(
-        ROOT_DIR, checkpoint) if checkpoint else None
-
-    reg_params = _get_params_from_registry(
-        checkpoint, "checkpoints/runs_registry.jsonl")
+    reg_params = _get_params_from_registry(checkpoint, "checkpoints/runs_registry.jsonl")
     merged = {**entry, **reg_params}
 
     if agent_type == "random":
@@ -129,12 +120,18 @@ def _load_agent(entry: dict, env: gym.Env):
                            **merged)
 
     if agent_type == "dqn_custom":
+        # Rétrocompatibilité : inférer hidden_dims depuis le checkpoint
+        if full_checkpoint_path and "hidden_dims" not in reg_params:
+            ckpt = torch.load(full_checkpoint_path, map_location="cpu")
+            weight_keys = [k for k in ckpt["q_net"] if k.endswith(".weight")]
+            merged["hidden_dims"] = [ckpt["q_net"][k].shape[0] for k in weight_keys[:-1]]
+
         cfg = _build_config(HighwayDQNConfig, merged)
         agent = DQNAgent(cfg, env.observation_space.shape, env.action_space.n)
-        if checkpoint:
+        if full_checkpoint_path:
             agent.load_checkpoint(full_checkpoint_path, show=False)
         return agent
-
+    
     if agent_type == "dqn_per":
         cfg = _build_config(HighwayPERConfig, merged)
         agent = PERDQNAgent(
