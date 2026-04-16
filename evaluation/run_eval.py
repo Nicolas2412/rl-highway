@@ -16,7 +16,7 @@ ROOT_DIR = os.path.dirname(CURRENT_DIR)
 
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
-    
+
 from shared_core_config import SHARED_CORE_CONFIG, SHARED_CORE_ENV_ID
 from agents.random_agent import RandomAgent
 from agents.dqn_sb3 import SB3DQNAgent
@@ -29,43 +29,33 @@ from tqdm import tqdm
 
 warnings.filterwarnings("ignore", category=UserWarning, module="pygame")
 
-import highway_env 
+import highway_env
 
 SEEDS = [9, 42, 67]
 NUM_EPISODES = 50
 FORCE = False
 
-SUMMARY_PATH = os.path.join(ROOT_DIR, "results", "fine-tuned_vs_non-fine-tuned", "eval_summary.json")
+SUMMARY_PATH = os.path.join(
+    ROOT_DIR, "results", "fine-tuned_vs_non-fine-tuned", "eval_summary.json"
+)
 
 EVAL_REGISTRY = [
     {
-        "name":       "Random",
+        "name": "Random",
         "agent_type": "random",
         "checkpoint": None,
     },
     {
-        "name":       "Vanilla DQN - not fine tuned",
+        "name": "Vanilla DQN - not fine tuned",
         "agent_type": "dqn_custom",
         "checkpoint": "checkpoints/simple-dqn_not_fine-tuned/20260410-112718_dqn_highway_final_episodic.pt",
     },
-
     {
-        "name":       "Vanilla DQN - fine-tuned",
+        "name": "Vanilla DQN - fine-tuned",
         "agent_type": "dqn_custom",
         "checkpoint": "checkpoints/dqn_custom_20260413-082750/20260413-082030_dqn_highway_step110000.pt",
         "double_dqn": False,
     },
-    # {
-    #     "name":       "DQN PER",
-    #     "agent_type": "dqn_per",
-    #     "checkpoint": "checkpoints/per_dqn_20260411-191026/20260412-021940_per_dqn_final.pt",
-    # },
-    # {
-    #     "name":       "DQN Double+PER",
-    #     "agent_type": "dqn_per",
-    #     "checkpoint": "checkpoints/20260412-084516_per_double_dqn/20260412-084516_per_double_dqn_final.pt",
-    #     "double_dqn": True,
-    # },
 ]
 
 
@@ -115,12 +105,13 @@ def _load_agent(entry: dict, env: gym.Env):
     merged = {**entry, **reg_params}
 
     if agent_type == "random":
-        return RandomAgent(action_space=env.action_space,
-                           observation_space=env.observation_space,
-                           **merged)
+        return RandomAgent(
+            action_space=env.action_space,
+            observation_space=env.observation_space,
+            **merged,
+        )
 
     if agent_type == "dqn_custom":
-        # Rétrocompatibilité : inférer hidden_dims depuis le checkpoint
         if full_checkpoint_path and "hidden_dims" not in reg_params:
             ckpt = torch.load(full_checkpoint_path, map_location="cpu")
             weight_keys = [k for k in ckpt["q_net"] if k.endswith(".weight")]
@@ -131,18 +122,21 @@ def _load_agent(entry: dict, env: gym.Env):
         if full_checkpoint_path:
             agent.load_checkpoint(full_checkpoint_path, show=False)
         return agent
-    
+
     if agent_type == "dqn_per":
         cfg = _build_config(HighwayPERConfig, merged)
-        agent = PERDQNAgent(
-            cfg, env.observation_space.shape, env.action_space.n)
+        agent = PERDQNAgent(cfg, env.observation_space.shape, env.action_space.n)
         if checkpoint:
             agent.load_checkpoint(full_checkpoint_path, show=False)
         return agent
 
     if agent_type == "sb3":
         cfg = _build_config(HighwayDQNConfig, merged)
-        return SB3DQNAgent(model_path=full_checkpoint_path, env=env) if checkpoint else SB3DQNAgent(cfg=cfg, env=env)
+        return (
+            SB3DQNAgent(model_path=full_checkpoint_path, env=env)
+            if checkpoint
+            else SB3DQNAgent(cfg=cfg, env=env)
+        )
 
     raise ValueError(f"Unknown agent_type: {agent_type}")
 
@@ -150,7 +144,8 @@ def _load_agent(entry: dict, env: gym.Env):
 def _run_episode(agent, env: gym.Env, seed: int | None) -> dict:
     obs, _ = env.reset(seed=seed)
     done = truncated = False
-    total_reward, steps, crashed, speeds = 0.0, 0, False, []
+    total_reward, steps, crashed = 0.0, 0, False
+    speeds: list[float] = []
 
     while not (done or truncated):
         action = agent.act(obs, epsilon=0.0)
@@ -160,28 +155,45 @@ def _run_episode(agent, env: gym.Env, seed: int | None) -> dict:
         if info.get("crashed", False):
             crashed = True
         if "speed" in info:
-            speeds.append(info["speed"])
+            speeds.append(float(info["speed"]))
 
     return {
-        "reward":     total_reward,
-        "length":     steps,
-        "crashed":    crashed,
+        "reward": total_reward,
+        "length": steps,
+        "crashed": crashed,
+        # per-step speeds for this episode (used for distribution plots)
+        "speeds": speeds,
+        # scalar mean kept for backward compatibility
         "mean_speed": float(np.mean(speeds)) if speeds else None,
+        # step at which the crash occurred (= episode length when crashed)
+        "crash_step": steps if crashed else None,
     }
 
 
-def evaluate_agent(entry: dict, seed: int, num_episodes: int, pbar: tqdm | None = None) -> dict:
+def evaluate_agent(
+    entry: dict, seed: int, num_episodes: int, pbar: tqdm | None = None
+) -> dict:
     env = _make_env()
     agent = _load_agent(entry, env)
-    rewards, lengths, crashed, speeds = [], [], [], []
+
+    rewards: list[float] = []
+    lengths: list[int] = []
+    crashed: list[bool] = []
+    episode_mean_speeds: list[float] = []
+    all_speeds: list[float] = []   # every step across all episodes
+    crash_steps: list[int] = []
 
     for ep_idx in range(num_episodes):
         r = _run_episode(agent, env, seed=seed if ep_idx == 0 else None)
         rewards.append(r["reward"])
         lengths.append(r["length"])
         crashed.append(r["crashed"])
+        all_speeds.extend(r["speeds"])
         if r["mean_speed"] is not None:
-            speeds.append(r["mean_speed"])
+            episode_mean_speeds.append(r["mean_speed"])
+        if r["crash_step"] is not None:
+            crash_steps.append(r["crash_step"])
+
         if pbar is not None:
             pbar.update(1)
             pbar.set_postfix(
@@ -191,18 +203,23 @@ def evaluate_agent(entry: dict, seed: int, num_episodes: int, pbar: tqdm | None 
             )
 
     env.close()
-    crash_lengths = [l for l, c in zip(lengths, crashed) if c]
+    n = num_episodes
     return {
-        "seed":            seed,
-        "rewards":         rewards,
-        "lengths":         lengths,
-        "crashed":         crashed,
-        "mean_reward":     float(np.mean(rewards)),
-        "std_reward":      float(np.std(rewards)),
-        "success_rate":    float(1 - np.mean(crashed)),
-        "mean_length":     float(np.mean(lengths)),
-        "mean_crash_step": float(np.mean(crash_lengths)) if crash_lengths else None,
-        "mean_speed":      float(np.mean(speeds)) if speeds else None,
+        "seed": seed,
+        "rewards": rewards,
+        "lengths": lengths,
+        "crashed": crashed,
+        "crash_steps": crash_steps,
+        "all_speeds": all_speeds,
+        "mean_reward": float(np.mean(rewards)),
+        "std_reward": float(np.std(rewards)),
+        "se_reward": float(np.std(rewards) / np.sqrt(n)),
+        "success_rate": float(1 - np.mean(crashed)),
+        "mean_length": float(np.mean(lengths)),
+        "std_length": float(np.std(lengths)),
+        "se_length": float(np.std(lengths) / np.sqrt(n)),
+        "mean_crash_step": float(np.mean(crash_steps)) if crash_steps else None,
+        "mean_speed": float(np.mean(episode_mean_speeds)) if episode_mean_speeds else None,
     }
 
 
@@ -210,46 +227,54 @@ def _aggregate(per_seed: list[dict]) -> dict:
     all_rewards = [r for s in per_seed for r in s["rewards"]]
     all_lengths = [l for s in per_seed for l in s["lengths"]]
     all_crashed = [c for s in per_seed for c in s["crashed"]]
-    all_speeds = [s["mean_speed"]
-                  for s in per_seed if s["mean_speed"] is not None]
-    crash_steps = [s["mean_crash_step"]
-                   for s in per_seed if s["mean_crash_step"] is not None]
+    all_speeds = [sp for s in per_seed for sp in s["all_speeds"]]
+    episode_mean_speeds = [s["mean_speed"] for s in per_seed if s["mean_speed"] is not None]
+    crash_steps = [cs for s in per_seed for cs in s["crash_steps"]]
+
+    n = len(all_rewards)
     return {
-        "mean_reward":     float(np.mean(all_rewards)),
-        "std_reward":      float(np.std(all_rewards)),
-        "median_reward":   float(np.median(all_rewards)),
-        "success_rate":    float(1 - np.mean(all_crashed)),
-        "mean_length":     float(np.mean(all_lengths)),
-        "std_length":      float(np.std(all_lengths)),
+        "mean_reward": float(np.mean(all_rewards)),
+        "std_reward": float(np.std(all_rewards)),
+        "se_reward": float(np.std(all_rewards) / np.sqrt(n)),
+        "median_reward": float(np.median(all_rewards)),
+        "success_rate": float(1 - np.mean(all_crashed)),
+        "mean_length": float(np.mean(all_lengths)),
+        "std_length": float(np.std(all_lengths)),
+        "se_length": float(np.std(all_lengths) / np.sqrt(n)),
         "mean_crash_step": float(np.mean(crash_steps)) if crash_steps else None,
-        "mean_speed":      float(np.mean(all_speeds)) if all_speeds else None,
-        "raw_rewards":     all_rewards,
-        "raw_lengths":     all_lengths,
-        "raw_crashed":     all_crashed,
+        "mean_speed": float(np.mean(episode_mean_speeds)) if episode_mean_speeds else None,
+        "raw_rewards": all_rewards,
+        "raw_lengths": all_lengths,
+        "raw_crashed": all_crashed,
+        "raw_speeds": all_speeds,          # per-step speeds across all episodes
+        "raw_crash_steps": crash_steps,    # step index of every crash event
     }
 
 
 SUMMARY_KEYS = [
-    "name", "agent_type", "checkpoint_used", "mean_reward", "std_reward",
-    "median_reward", "success_rate", "mean_length", "std_length",
-    "mean_speed", "mean_crash_step", "seeds", "num_episodes", "per_seed",
+    "name", "agent_type", "checkpoint_used",
+    "mean_reward", "std_reward", "se_reward",
+    "median_reward", "success_rate",
+    "mean_length", "std_length", "se_length",
+    "mean_speed", "mean_crash_step",
+    "seeds", "num_episodes", "per_seed",
+    "raw_rewards", "raw_lengths", "raw_crashed",
+    "raw_speeds", "raw_crash_steps",
 ]
 
 
 def _save_summary(all_results: list[dict]) -> None:
     os.makedirs(os.path.dirname(SUMMARY_PATH), exist_ok=True)
     with open(SUMMARY_PATH, "w", encoding="utf-8") as f:
-        json.dump([{k: r.get(k) for k in SUMMARY_KEYS}
-                  for r in all_results], f, indent=2)
+        json.dump([{k: r.get(k) for k in SUMMARY_KEYS} for r in all_results], f, indent=2)
 
 
 def _print_summary(all_results: list[dict]) -> None:
     def fmt(v):
         return f"{v:.1f}" if v is not None else "N/A"
 
-    col_w = [20, 9, 9, 11, 10, 8, 9]
-    headers = ["Agent", "Reward", "± std",
-               "Success %", "Ep.len", "Speed", "Crash.Step"]
+    col_w = [28, 9, 9, 9, 11, 10, 8, 9]
+    headers = ["Agent", "Reward", "± std", "± SE", "Success %", "Ep.len", "Speed", "Crash.Step"]
     header = "  ".join(h.ljust(w) for h, w in zip(headers, col_w))
     sep = "-" * len(header)
 
@@ -260,6 +285,7 @@ def _print_summary(all_results: list[dict]) -> None:
             r["name"],
             f"{r['mean_reward']:.3f}",
             f"{r['std_reward']:.3f}",
+            f"{r.get('se_reward', 0):.3f}",
             f"{r['success_rate'] * 100:.1f}",
             f"{r['mean_length']:.1f}",
             fmt(r.get("mean_speed")),
@@ -272,6 +298,7 @@ def _print_summary(all_results: list[dict]) -> None:
                 f"  ├─ Seed {s['seed']}",
                 f"{s['mean_reward']:.3f}",
                 f"{s['std_reward']:.3f}",
+                f"{s.get('se_reward', 0):.3f}",
                 f"{s['success_rate'] * 100:.1f}",
                 f"{s['mean_length']:.1f}",
                 fmt(s.get("mean_speed")),
@@ -283,8 +310,7 @@ def _print_summary(all_results: list[dict]) -> None:
 
 
 def main() -> None:
-    print(
-        f"Seeds: {SEEDS}  |  Episodes: {NUM_EPISODES}/seed  |  Force: {FORCE}\n")
+    print(f"Seeds: {SEEDS}  |  Episodes: {NUM_EPISODES}/seed  |  Force: {FORCE}\n")
 
     existing = []
     if os.path.exists(SUMMARY_PATH):
@@ -300,14 +326,18 @@ def main() -> None:
         checkpoint = entry.get("checkpoint")
         checkpoint_name = (
             os.path.relpath(checkpoint, ROOT_DIR).replace("\\", "/")
-            if checkpoint else "No Checkpoint"
+            if checkpoint
+            else "No Checkpoint"
         )
 
         cached = next(
-            (r for r in existing
-             if r["name"] == entry["name"]
-             and r.get("checkpoint_used") == checkpoint_name
-             and r.get("num_episodes", 0) >= NUM_EPISODES),
+            (
+                r
+                for r in existing
+                if r["name"] == entry["name"]
+                and r.get("checkpoint_used") == checkpoint_name
+                and r.get("num_episodes", 0) >= NUM_EPISODES
+            ),
             None,
         )
 
@@ -320,25 +350,37 @@ def main() -> None:
         per_seed = []
         with tqdm(total=NUM_EPISODES * len(SEEDS), desc=entry["name"], unit="ep") as pbar:
             for seed in SEEDS:
-                per_seed.append(evaluate_agent(
-                    entry, seed=seed, num_episodes=NUM_EPISODES, pbar=pbar))
+                per_seed.append(
+                    evaluate_agent(entry, seed=seed, num_episodes=NUM_EPISODES, pbar=pbar)
+                )
 
         result = _aggregate(per_seed)
-        result.update({
-            "name":            entry["name"],
-            "agent_type":      entry["agent_type"],
-            "checkpoint_used": checkpoint_name,
-            "seeds":           SEEDS,
-            "num_episodes":    NUM_EPISODES,
-            "per_seed": [
-                {k: s[k] for k in ("seed", "mean_reward", "std_reward",
-                                   "success_rate", "mean_length", "mean_speed", "mean_crash_step")}
-                for s in per_seed
-            ],
-        })
+        result.update(
+            {
+                "name": entry["name"],
+                "agent_type": entry["agent_type"],
+                "checkpoint_used": checkpoint_name,
+                "seeds": SEEDS,
+                "num_episodes": NUM_EPISODES,
+                "per_seed": [
+                    {
+                        k: s[k]
+                        for k in (
+                            "seed", "mean_reward", "std_reward", "se_reward",
+                            "success_rate", "mean_length", "se_length",
+                            "mean_speed", "mean_crash_step",
+                        )
+                    }
+                    for s in per_seed
+                ],
+            }
+        )
 
-        print(f"       R={result['mean_reward']:.3f} ± {result['std_reward']:.3f}"
-              f"  |  success={result['success_rate'] * 100:.1f}%")
+        print(
+            f"       R={result['mean_reward']:.3f} ± {result['std_reward']:.3f}"
+            f"  (SE={result['se_reward']:.3f})"
+            f"  |  success={result['success_rate'] * 100:.1f}%"
+        )
 
         all_results.append(result)
         _save_summary(all_results)
