@@ -15,17 +15,17 @@ from scipy import stats
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(CURRENT_DIR)
 SUMMARY_PATH = os.path.join(
-    ROOT_DIR, "results", "fine-tuned_vs_non-fine-tuned", "eval_summary.json"
+    ROOT_DIR, "results", "eval_summary.json"
 )
 PLOT_DIR = os.path.join(
-    ROOT_DIR, "results", "fine-tuned_vs_non-fine-tuned", "plots"
+    ROOT_DIR, "results", "plots"
 )
 
-to_plot = ["Random", "Vanilla DQN - not fine tuned", "Vanilla DQN - fine-tuned"]
+to_plot = ["Random", "DQN Custom", "SB3 DQN", "DQN Double", "DQN Double+PER"]
 
 AGENT_COLORS = {
-    "Vanilla DQN - not fine tuned": "#9C003C",
-    "Vanilla DQN - fine-tuned":     "#FFA8A8",
+    "DQN Custom": "#9C003C",
+    "SB3 DQN":     "#FFA8A8",
     "DQN Double":                   "#975053",
     "DQN PER":                      "#BA919B",
     "DQN Double+PER":               "#F5405E",

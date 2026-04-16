@@ -36,27 +36,43 @@ NUM_EPISODES = 50
 FORCE = False
 
 SUMMARY_PATH = os.path.join(
-    ROOT_DIR, "results", "fine-tuned_vs_non-fine-tuned", "eval_summary.json"
+    ROOT_DIR, "results", "eval_summary.json"
 )
-
 EVAL_REGISTRY = [
     {
-        "name": "Random",
+        "name":       "Random",
         "agent_type": "random",
         "checkpoint": None,
     },
     {
-        "name": "Vanilla DQN - not fine tuned",
+        "name":       "DQN Custom",
         "agent_type": "dqn_custom",
-        "checkpoint": "checkpoints/simple-dqn_not_fine-tuned/20260410-112718_dqn_highway_final_episodic.pt",
+        "checkpoint": "checkpoints/dqn_custom_20260413-082750/model_dqn_custom.pt",
     },
     {
-        "name": "Vanilla DQN - fine-tuned",
+        "name":       "SB3 DQN",
+        "agent_type": "sb3",
+        "checkpoint": "checkpoints/sb3_dqn/model_dqn_sb3.zip",
+    },
+    {
+        "name":       "DQN Double",
         "agent_type": "dqn_custom",
-        "checkpoint": "checkpoints/dqn_custom_20260413-082750/20260413-082030_dqn_highway_step110000.pt",
-        "double_dqn": False,
+        "checkpoint": "checkpoints/dqn_20260411-135652/20260413-063222_dqn_highway_final.pt",
+        "double_dqn": True,
+    },
+    {
+        "name":       "DQN PER",
+        "agent_type": "dqn_per",
+        "checkpoint": "checkpoints/per_dqn_20260411-191026/20260412-021940_per_dqn_final.pt",
+    },
+    {
+        "name":       "DQN Double+PER",
+        "agent_type": "dqn_per",
+        "checkpoint": "checkpoints/20260412-084516_per_double_dqn/20260412-084516_per_double_dqn_final.pt",
+        "double_dqn": True,
     },
 ]
+
 
 
 def _make_env() -> gym.Env:
