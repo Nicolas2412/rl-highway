@@ -11,7 +11,7 @@ Le code est structuré pour séparer la logique des agents, des entraînements e
 * `agents/` : Contient les classes des modèles (DQN Custom, SB3, PER, Random).
 * `checkpoints/` : Stocke les poids des modèles et les logs TensorBoard.
 * `dce_scripts/` : Contient des scripts utilisés pour entraîner les agents sur le DCE de CentraleSupélec.
-* `training/` : Scripts d'entraînement. `unified_train.py` a été utilisé pour la partie commune (entraînement d'un DQN custom et avec SB3). Les autres scripts ont été utilisés pour l'ajout des extensions. Il contient également les codes relatifs à l'optimisation des paramètres via Optuna.
+* `training/` : Scripts d'entraînement. `unified_train.py` a été utilisé pour la partie commune (entraînement d'un DQN custom et avec SB3). Les autres scripts ont été utilisés pour l'ajout des extensions. Il contient également les codes relatifs à l'optimisation des hyperparamètres via Optuna.
 * `evaluation/` : Scripts pour évaluer (`run_eval.py`), générer les graphiques (`plot_eval.py`) et visualiser les différents agents (`test_agent.py`).
 * `notebooks/` : Contient un notebook d'étude des runs.
 * `results/` : Stocke le JSON des statistiques et les différentes figures et vidéos.
@@ -77,3 +77,19 @@ Pour générer ou mettre à jour les graphiques de comparaison PNG dans le dossi
     python evaluation/plot_eval.py
 
 ![Model comparison](results/plots/extension/all/global_metrics.png)
+
+### 4. Lancer le fine-tuning des hyperparamètres
+
+Le fine-tuning choisit utilise un *Tree-structured Parzen Estimator* (TPE). Pour le lancer à partir du dossier source :
+
+    python -m training.hparam.hparam_search --n-trials 20 --fresh
+
+avec l'argument *fresh* pour indiquer une reprise de zero du fine-tuning et 20 pour le nombre d'essais. Les résultats sont sauvegardés dans le fichier `training/hparam_results/optuna_study.db` 
+
+> Attention, cette partie est très demandeuse en temps de calcul
+
+Pour visualiser les résultats du fine-tuning à partir à partir de `optuna_study.db`, lancer :
+
+    python training/hparam/hparam_viz.py --study-db hparam_results/optuna_study.db --save
+
+L'argument `--study-db`permet de déterminer quelle base de données de résultats chargée.
