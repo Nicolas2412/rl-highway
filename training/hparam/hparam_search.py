@@ -1,16 +1,8 @@
 """
 Recherche d'hyperparamètres DQN avec Optuna.
 
-La boucle d'évaluation est alignée sur train_dqn.py (env simple, non vectorisé)
-pour des raisons de temps de calcul : chaque trial ne dure que TRIAL_STEPS steps,
-et le surcoût de AsyncVectorEnv (spawn de sous-processus) serait disproportionné.
-
-Le pruning Optuna est activé : trial.report() est appelé toutes les
-PRUNE_CHECK_FREQ steps, et trial.should_prune() interrompt les trials
-manifestement sous-performants.
-
 Usage :
-    python -m training.hparam.hparam_search --n-trials 20 --fresh
+    python -m core_task.hparam.hparam_search --n-trials 20 --fresh
 """
 
 import argparse
@@ -23,7 +15,7 @@ import numpy as np
 import optuna
 import torch
 import gymnasium as gym
-import highway_env  # noqa: F401
+import highway_env 
 from tqdm import tqdm
 
 from shared_core_config import SHARED_CORE_CONFIG, SHARED_CORE_ENV_ID
@@ -31,8 +23,8 @@ from agents.dqn_custom import DQNAgent, HighwayDQNConfig
 
 TRIAL_STEPS      = 10_000
 PRUNE_CHECK_FREQ = 1_000   # fréquence de rapport intermédiaire au pruner
-RESULTS_DIR      = "training/hparam_results"
-DB_PATH          = os.path.join(RESULTS_DIR, "optuna_study.db")
+RESULTS_DIR      = "hparam_results"
+DB_PATH          = os.path.join(RESULTS_DIR, "optuna_study_test.db")
 STUDY_NAME       = "highway_dqn"
 
 
@@ -64,7 +56,7 @@ def evaluate_config(
 
     Parameters
     ----------
-    cfg   : configuration de l'agent (tous les champs doivent être persistés)
+    cfg   : configuration de l'agent
     trial : objet Optuna utilisé pour le reporting intermédiaire et le pruning
     pbar  : barre de progression partagée entre tous les trials
     """
@@ -138,8 +130,6 @@ def evaluate_config(
 def make_objective(pbar: tqdm):
     """
     Retourne la fonction objectif qui sera appelée par study.optimize().
-    La barre de progression est injectée par fermeture — plus propre que
-    la variable globale de l'original.
     """
     def objective(trial: optuna.Trial) -> float:
         hidden_size = trial.suggest_categorical("hidden", [128, 256, 512])
