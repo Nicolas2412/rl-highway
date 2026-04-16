@@ -29,7 +29,7 @@ from shared_core_config import SHARED_CORE_CONFIG
 class HighwayDQNConfig:
     env_id: str = "highway-v0"
     seed: int = 42
-    hidden_dims: List[int] = field(default_factory=lambda: [256, 256])
+    hidden_dims: List[int] = field(default_factory=lambda: [128])
     total_timesteps: int = 200_000
     learning_rate: float = 0.0001432249371823026
     gamma: float = 0.8296389588638785

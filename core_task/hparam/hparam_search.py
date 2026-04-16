@@ -1,14 +1,6 @@
 """
 Recherche d'hyperparamètres DQN avec Optuna.
 
-La boucle d'évaluation est alignée sur train_dqn.py (env simple, non vectorisé)
-pour des raisons de temps de calcul : chaque trial ne dure que TRIAL_STEPS steps,
-et le surcoût de AsyncVectorEnv (spawn de sous-processus) serait disproportionné.
-
-Le pruning Optuna est activé : trial.report() est appelé toutes les
-PRUNE_CHECK_FREQ steps, et trial.should_prune() interrompt les trials
-manifestement sous-performants.
-
 Usage :
     python -m core_task.hparam.hparam_search --n-trials 20 --fresh
 """
@@ -23,7 +15,7 @@ import numpy as np
 import optuna
 import torch
 import gymnasium as gym
-import highway_env  # noqa: F401
+import highway_env 
 from tqdm import tqdm
 
 from shared_core_config import SHARED_CORE_CONFIG, SHARED_CORE_ENV_ID
@@ -64,7 +56,7 @@ def evaluate_config(
 
     Parameters
     ----------
-    cfg   : configuration de l'agent (tous les champs doivent être persistés)
+    cfg   : configuration de l'agent
     trial : objet Optuna utilisé pour le reporting intermédiaire et le pruning
     pbar  : barre de progression partagée entre tous les trials
     """
@@ -138,8 +130,6 @@ def evaluate_config(
 def make_objective(pbar: tqdm):
     """
     Retourne la fonction objectif qui sera appelée par study.optimize().
-    La barre de progression est injectée par fermeture — plus propre que
-    la variable globale de l'original.
     """
     def objective(trial: optuna.Trial) -> float:
         hidden_size = trial.suggest_categorical("hidden", [128, 256, 512])
